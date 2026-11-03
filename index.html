@@ -31,7 +31,7 @@ const $=s=>document.querySelector(s);let cur=new Date();cur.setHours(0,0,0,0);
 const key=d=>d.toISOString().slice(0,10).replace(/T.*/,'')
 const dk=d=>`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
 const load=()=>JSON.parse(localStorage.planner||'{}'),save=o=>localStorage.planner=JSON.stringify(o);
-const slots=[];for(let m=8*60;m<26*60;m+=30)slots.push(m);
+const slots=[];for(let m=8*60;m<=26*60;m+=30)slots.push(m);
 const fmt=m=>String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
 slots.forEach(m=>$('#start').add(new Option(fmt(m),m)));[15,30,45,60,90,120,180,240].forEach(v=>$('#dur').add(new Option(v<60?v+' דק׳':(v/60)+' שע׳',v)));
 let editing=null;
@@ -69,7 +69,7 @@ const n=new Date(cur);n.setDate(n.getDate()+1);const nk=dk(n);o[nk]=(o[nk]||[]).
 const tab=t=>{$('#grid').style.display=t?'none':'';$('#todo').style.display=t?'block':'none';$('#tabS').classList.toggle('on',!t);$('#tabT').classList.toggle('on',t)};
 $('#tabS').onclick=()=>tab(false);$('#tabT').onclick=()=>tab(true);
 const _r=render;render=function(){_r();renderT()};
-const pday=()=>{const d=new Date();if(d.getHours()<2)d.setDate(d.getDate()-1);d.setHours(0,0,0,0);return d};
+const pday=()=>{const d=new Date();if(d.getHours()*60+d.getMinutes()<150)d.setDate(d.getDate()-1);d.setHours(0,0,0,0);return d};
 const wstart=()=>{const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-d.getDay());return d};
 let ws,lastP;
 function weekCheck(){const w=wstart(),k=dk(w);if(localStorage.weekStart!==k){localStorage.weekStart=k;localStorage.planner='{}';localStorage.todos='{}'}
