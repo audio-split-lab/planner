@@ -16,6 +16,7 @@ button{border:0;border-radius:10px;padding:8px 12px;font-size:.95rem;cursor:poin
 #todo{display:none;background:#fff;border-radius:12px;padding:10px}.add{display:flex;gap:6px}.add input{flex:1;padding:10px;border:1px solid #ccc;border-radius:10px;font:inherit}
 .it{display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid #eee}.it span{flex:1;cursor:pointer}.it.done span{text-decoration:line-through;color:#9ca3af}.it input{width:22px;height:22px}.it button{padding:4px 8px;background:#f3f4f6}
 .week{display:flex;gap:4px;margin-top:8px;overflow-x:auto}.week button{flex:1;min-width:44px;padding:6px 2px;background:#6366f1;color:#fff;font-size:.8rem;line-height:1.2}.week button.on{background:#fff;color:#4f46e5;font-weight:700}.week button.td{outline:2px solid #fbbf24}
+.slot.q{min-height:34px;border-bottom-style:dashed}.slot.q .t{opacity:.6}
 </style></head><body>
 <header><h1>📒 היומן של נתנאל</h1><div class="nav"><span id="date"></span><button id="notif">🔔 הפעל התראות</button></div><div class="week" id="week"></div><div class="tabs"><button id="tabS" class="on">לו"ז</button><button id="tabT">משימות</button></div></header>
 <main><div id="grid"></div><div id="todo"><div class="add"><input id="newT" placeholder="מה צריך לעשות היום?"><button class="p" id="addT">הוסף</button></div><div id="list"></div><button id="moveT" style="margin-top:10px;width:100%">העבר משימות שלא הושלמו למחר ←</button></div></main>
@@ -31,15 +32,15 @@ const $=s=>document.querySelector(s);let cur=new Date();cur.setHours(0,0,0,0);
 const key=d=>d.toISOString().slice(0,10).replace(/T.*/,'')
 const dk=d=>`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
 const load=()=>JSON.parse(localStorage.planner||'{}'),save=o=>localStorage.planner=JSON.stringify(o);
-const slots=[];for(let m=8*60;m<=26*60;m+=30)slots.push(m);
+const slots=[];for(let m=8*60;m<=26*60;m+=15)slots.push(m);
 const fmt=m=>String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
-slots.forEach(m=>$('#start').add(new Option(fmt(m),m)));[15,30,45,60,90,120,180,240].forEach(v=>$('#dur').add(new Option(v<60?v+' דק׳':(v/60)+' שע׳',v)));
+slots.forEach(m=>$('#start').add(new Option(fmt(m),m)));Array.from({length:32},(_,i)=>(i+1)*15).forEach(v=>$('#dur').add(new Option(v<60?v+' דק׳':(Math.floor(v/60)+' שע׳'+(v%60?' ו־'+v%60+' דק׳':'')),v)));
 let editing=null;
 var render;render=function(){const tasks=(load()[dk(cur)]||[]);$('#date').textContent=cur.toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long'});
 const g=$('#grid');g.innerHTML='';const n=new Date(),nm=(n-cur)/60000;
-slots.forEach(m=>{const r=document.createElement('div');r.className='slot'+(m%60?'':' hour')+(nm>=m&&nm<m+30?' now':'');
+slots.filter(m=>cur.getDay()!==6||m<24*60).forEach(m=>{const r=document.createElement('div');r.className='slot'+(m%60?'':' hour')+(m%30?' q':'')+(nm>=m&&nm<m+15?' now':'');
 r.innerHTML=`<div class="t">${fmt(m)}</div><div class="c"></div>`;const c=r.lastChild;
-tasks.filter(t=>t.start>=m&&t.start<m+30).forEach(t=>{const e=document.createElement('div');e.className='task';
+tasks.filter(t=>t.start>=m&&t.start<m+15).forEach(t=>{const e=document.createElement('div');e.className='task';
 e.innerHTML=`<b></b><small>${fmt(t.start)}–${fmt(t.start+ +t.dur)}</small><div></div>`;e.querySelector('b').textContent=t.title;e.lastChild.textContent=t.note||'';
 e.onclick=ev=>{ev.stopPropagation();open(t)};c.append(e)});c.onclick=()=>open(null,m);g.append(r)})}
 function open(t,m){editing=t;$('#dt').textContent=t?'עריכת משימה':'משימה חדשה';$('#title').value=t?t.title:'';$('#start').value=t?t.start:m;$('#dur').value=t?t.dur:60;$('#note').value=t?t.note:'';$('#del').style.display=t?'':'none';$('#dlg').showModal()}
