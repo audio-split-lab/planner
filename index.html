@@ -17,12 +17,17 @@ button{border:0;border-radius:10px;padding:8px 12px;font-size:.95rem;cursor:poin
 .it{display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid #eee}.it span{flex:1;cursor:pointer}.it.done span{text-decoration:line-through;color:#9ca3af}.it input{width:22px;height:22px}.it button{padding:4px 8px;background:#f3f4f6}
 .week{display:flex;gap:4px;margin-top:8px;overflow-x:auto}.week button{flex:1;min-width:44px;padding:6px 2px;background:#6366f1;color:#fff;font-size:.8rem;line-height:1.2}.week button.on{background:#fff;color:#4f46e5;font-weight:700}.week button.td{outline:2px solid #fbbf24}
 .slot.q{min-height:34px;border-bottom-style:dashed}.slot.q .t{opacity:.6}
+.task{position:relative;padding-left:34px}.task .ck{position:absolute;left:6px;top:6px;width:22px;height:22px}.task.done{opacity:.55}.task.done b{text-decoration:line-through}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:.8rem;padding:6px 4px}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-left:4px;vertical-align:middle}
+.add select{padding:8px;border:1px solid #ccc;border-radius:10px;font:inherit}#sum{display:none;background:#fff;border-radius:12px;padding:12px}#sum h3{margin:12px 0 6px;font-size:1rem}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}.card{background:#eef2ff;border-radius:10px;padding:10px;text-align:center}.card b{display:block;font-size:1.4rem;color:#4f46e5}
+.bar{height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin-top:4px}.bar i{display:block;height:100%}#sum ul{padding-right:18px;margin:4px 0}
 </style></head><body>
-<header><h1>📒 היומן של נתנאל</h1><div class="nav"><span id="date"></span><button id="notif">🔔 הפעל התראות</button></div><div class="week" id="week"></div><div class="tabs"><button id="tabS" class="on">לו"ז</button><button id="tabT">משימות</button></div></header>
-<main><div id="grid"></div><div id="todo"><div class="add"><input id="newT" placeholder="מה צריך לעשות היום?"><button class="p" id="addT">הוסף</button></div><div id="list"></div><button id="moveT" style="margin-top:10px;width:100%">העבר משימות שלא הושלמו למחר ←</button></div></main>
+<header><h1>📒 היומן של נתנאל</h1><div class="nav"><span id="date"></span><button id="notif">🔔 הפעל התראות</button></div><div class="week" id="week"></div><div class="tabs"><button id="tabS" class="on">לו"ז</button><button id="tabT">משימות</button><button id="tabU">סיכום</button></div></header>
+<main><div id="schedW"><div class="legend" id="legend"></div><div id="grid"></div></div><div id="todo"><div class="add"><input id="newT" placeholder="מה צריך לעשות היום?"><select id="newC"><option value="">ללא</option></select><button class="p" id="addT">הוסף</button></div><div id="list"></div><button id="moveT" style="margin-top:10px;width:100%">העבר משימות שלא הושלמו למחר ←</button></div><div id="sum"></div></main>
 <dialog id="dlg"><form method="dialog" id="f"><h3 id="dt">משימה</h3>
 <label>כותרת<input id="title" required></label><label>שעת התחלה<select id="start"></select></label>
-<label>משך<select id="dur"></select></label><label>הערה<textarea id="note" rows="2"></textarea></label>
+<label>משך<select id="dur"></select></label><label>קטגוריה<select id="cat"></select></label><label>הערה<textarea id="note" rows="2"></textarea></label>
 <div class="row"><button class="p" value="save">שמור</button><button class="d" id="del" value="del">מחק</button><button value="cancel" formnovalidate>ביטול</button></div></form></dialog>
 <div id="alert"></div>
 <script>
@@ -36,16 +41,22 @@ const slots=[];for(let m=8*60;m<=26*60;m+=15)slots.push(m);
 const fmt=m=>String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
 slots.forEach(m=>$('#start').add(new Option(fmt(m),m)));Array.from({length:32},(_,i)=>(i+1)*15).forEach(v=>$('#dur').add(new Option(v<60?v+' דק׳':(Math.floor(v/60)+' שע׳'+(v%60?' ו־'+v%60+' דק׳':'')),v)));
 let editing=null;
+const CATS={work:['עבודה','#2563eb','#dbeafe'],personal:['אישי','#16a34a','#dcfce7'],shop:['קניות','#ea580c','#ffedd5'],other:['אחר','#6b7280','#f3f4f6']};
+for(const k in CATS){$('#cat').add(new Option(CATS[k][0],k));$('#newC').add(new Option(CATS[k][0],k))}
+$('#legend').innerHTML=Object.values(CATS).map(c=>`<span><span class="dot" style="background:${c[1]}"></span>${c[0]}</span>`).join('');
+const catOf=t=>CATS[t.cat]||CATS.other;
 var render;render=function(){const tasks=(load()[dk(cur)]||[]);$('#date').textContent=cur.toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long'});
 const g=$('#grid');g.innerHTML='';const n=new Date(),nm=(n-cur)/60000;
 slots.filter(m=>cur.getDay()!==6||m<24*60).forEach(m=>{const r=document.createElement('div');r.className='slot'+(m%60?'':' hour')+(m%30?' q':'')+(nm>=m&&nm<m+15?' now':'');
 r.innerHTML=`<div class="t">${fmt(m)}</div><div class="c"></div>`;const c=r.lastChild;
-tasks.filter(t=>t.start>=m&&t.start<m+15).forEach(t=>{const e=document.createElement('div');e.className='task';
-e.innerHTML=`<b></b><small>${fmt(t.start)}–${fmt(t.start+ +t.dur)}</small><div></div>`;e.querySelector('b').textContent=t.title;e.lastChild.textContent=t.note||'';
+tasks.filter(t=>t.start>=m&&t.start<m+15).forEach(t=>{const e=document.createElement('div');e.className='task'+(t.done?' done':'');const cc=catOf(t);e.style.borderRightColor=cc[1];e.style.background=cc[2];
+e.innerHTML=`<input type="checkbox" class="ck" title="בוצע"><b></b><small>${fmt(t.start)}–${fmt(t.start+ +t.dur)}</small><div></div>`;e.querySelector('b').textContent=t.title;e.lastChild.textContent=t.note||'';
+const ck=e.querySelector('.ck');ck.checked=!!t.done;if(t.done)e.querySelector('b').textContent='✅ '+t.title;
+ck.onclick=ev=>ev.stopPropagation();ck.onchange=()=>{const all=load(),x=(all[dk(cur)]||[]).find(y=>y.id===t.id);if(x){x.done=ck.checked;save(all)}render()};
 e.onclick=ev=>{ev.stopPropagation();open(t)};c.append(e)});c.onclick=()=>open(null,m);g.append(r)})}
-function open(t,m){editing=t;$('#dt').textContent=t?'עריכת משימה':'משימה חדשה';$('#title').value=t?t.title:'';$('#start').value=t?t.start:m;$('#dur').value=t?t.dur:60;$('#note').value=t?t.note:'';$('#del').style.display=t?'':'none';$('#dlg').showModal()}
+function open(t,m){editing=t;$('#dt').textContent=t?'עריכת משימה':'משימה חדשה';$('#title').value=t?t.title:'';$('#start').value=t?t.start:m;$('#dur').value=t?t.dur:60;$('#note').value=t?t.note:'';$('#del').style.display=t?'':'none';$('#cat').value=t&&t.cat||'other';const sat=cur.getDay()===6;[...$('#start').options].forEach(o=>{o.hidden=o.disabled=sat&&+o.value>=24*60});if(sat&&+$('#start').value>=24*60)$('#start').value=23*60+45;$('#dlg').showModal()}
 $('#dlg').onclose=()=>{const v=$('#dlg').returnValue,all=load(),k=dk(cur);let a=all[k]||[];
-if(v==='save'&&$('#title').value.trim()){const o={id:editing?editing.id:Date.now(),title:$('#title').value.trim(),start:+$('#start').value,dur:+$('#dur').value,note:$('#note').value,notified:false};a=a.filter(x=>x.id!==o.id);a.push(o)}
+if(v==='save'&&$('#title').value.trim()){const o={id:editing?editing.id:Date.now(),title:$('#title').value.trim(),start:+$('#start').value,dur:+$('#dur').value,note:$('#note').value,cat:$('#cat').value,done:editing?!!editing.done:false,notified:editing&&editing.start===+$('#start').value?!!editing.notified:false};a=a.filter(x=>x.id!==o.id);a.push(o)}
 else if(v==='del'&&editing)a=a.filter(x=>x.id!==editing.id);a.sort((x,y)=>x.start-y.start);all[k]=a;save(all);render()};
 $('#notif').onclick=async()=>{const p=await Notification.requestPermission();$('#notif').textContent=p==='granted'?'🔔 התראות פעילות':'🔕 התראות חסומות';beep()};
 if(window.Notification&&Notification.permission==='granted')$('#notif').textContent='🔔 התראות פעילות';
@@ -54,22 +65,33 @@ async function notify(t){const msg=`בעוד 10 דקות: ${t.title} (${fmt(t.st
 const al=$('#alert');al.textContent='⏰ '+msg;al.style.display='block';setTimeout(()=>al.style.display='none',15000);
 if(window.Notification&&Notification.permission==='granted'){const r=await navigator.serviceWorker?.getRegistration();r?r.showNotification('תזכורת ⏰',{body:msg,icon:'icon.svg',vibrate:[300,100,300]}):new Notification('תזכורת ⏰',{body:msg})}}
 function check(){const all=load(),now=Date.now();let ch=false;for(const k in all){const [y,mo,d]=k.split('-').map(Number);const base=new Date(y,mo-1,d).getTime();
-for(const t of all[k]){const st=base+t.start*60000,diff=st-now;if(!t.notified&&diff<=10*60000&&diff>-60000){t.notified=true;ch=true;notify(t)}}}if(ch)save(all)}
+for(const t of all[k]){const st=base+t.start*60000,diff=st-now;if(!t.done&&!t.notified&&diff<=10*60000&&diff>-60000){t.notified=true;ch=true;notify(t)}}}if(ch)save(all)}
 setInterval(()=>{check()},20000);setInterval(render,300000);const lt=()=>JSON.parse(localStorage.todos||'{}'),st=o=>localStorage.todos=JSON.stringify(o);
 function renderT(){const l=$('#list');l.innerHTML='';const a=lt()[dk(cur)]||[];if(!a.length)l.innerHTML='<p style="color:#888;text-align:center">אין משימות ליום הזה</p>';
-a.forEach((t,i)=>{const r=document.createElement('div');r.className='it'+(t.done?' done':'');r.innerHTML='<input type="checkbox"><span></span><button>✏️</button><button>🗑️</button>';
-const[c,sp,e,d]=r.children;c.checked=t.done;sp.textContent=t.text;
-const upd=f=>{const o=lt(),k=dk(cur);f(o[k]);st(o);renderT()};
+a.forEach((t,i)=>{const r=document.createElement('div');r.className='it'+(t.done?' done':'');r.innerHTML='<input type="checkbox"><span></span>'+(t.cat&&CATS[t.cat]?`<span class="dot" style="background:${CATS[t.cat][1]};flex:none" title="${CATS[t.cat][0]}"></span>`:'')+'<button>✏️</button><button>🗑️</button>';
+const ch=[...r.children],c=ch[0],sp=ch[1],e=ch[ch.length-2],d=ch[ch.length-1];c.checked=t.done;sp.textContent=t.text;
+const upd=f=>{const o=lt(),k=dk(cur);f(o[k]);st(o);renderT();renderSum()};
 c.onchange=()=>upd(x=>x[i].done=c.checked);sp.onclick=()=>upd(x=>x[i].done=!x[i].done);
 e.onclick=()=>{const v=prompt('עריכת משימה',t.text);if(v&&v.trim())upd(x=>x[i].text=v.trim())};
-d.onclick=()=>{if(confirm('למחוק?'))upd(x=>x.splice(i,1))};l.append(r)})}
-function addT(){const v=$('#newT').value.trim();if(!v)return;const o=lt(),k=dk(cur);(o[k]=o[k]||[]).push({text:v,done:false});st(o);$('#newT').value='';renderT()}
+d.onclick=()=>{if(confirm('למחוק?'))upd(x=>x.splice(i,1))};l.append(r)});if(typeof renderSum==='function'&&ws)renderSum()}
+function addT(){const v=$('#newT').value.trim();if(!v)return;const o=lt(),k=dk(cur);(o[k]=o[k]||[]).push({text:v,done:false,cat:$('#newC').value||undefined});st(o);$('#newT').value='';renderT()}
 $('#addT').onclick=addT;$('#newT').onkeydown=e=>{if(e.key==='Enter')addT()};
 $('#moveT').onclick=()=>{const o=lt(),k=dk(cur),a=o[k]||[],u=a.filter(x=>!x.done);if(!u.length)return alert('אין משימות פתוחות');
 const n=new Date(cur);n.setDate(n.getDate()+1);const nk=dk(n);o[nk]=(o[nk]||[]).concat(u);o[k]=a.filter(x=>x.done);st(o);renderT();alert(`הועברו ${u.length} משימות למחר`)};
-const tab=t=>{$('#grid').style.display=t?'none':'';$('#todo').style.display=t?'block':'none';$('#tabS').classList.toggle('on',!t);$('#tabT').classList.toggle('on',t)};
-$('#tabS').onclick=()=>tab(false);$('#tabT').onclick=()=>tab(true);
-const _r=render;render=function(){_r();renderT()};
+const tab=t=>{[['#schedW','#tabS'],['#todo','#tabT'],['#sum','#tabU']].forEach(([p,b],i)=>{$(p).style.display=i===t?'block':'none';$(b).classList.toggle('on',i===t)})};
+$('#tabS').onclick=()=>tab(0);$('#tabT').onclick=()=>tab(1);$('#tabU').onclick=()=>tab(2);
+const dur=m=>m<60?m+' דק׳':Math.floor(m/60)+' שע׳'+(m%60?' ו־'+m%60+' דק׳':'');
+const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function renderSum(){const ts=load()[dk(cur)]||[],td=lt()[dk(cur)]||[];const sd=ts.filter(t=>t.done),dd=td.filter(t=>t.done);
+const plan=ts.reduce((a,t)=>a+ +t.dur,0),dn=sd.reduce((a,t)=>a+ +t.dur,0);
+let h=`<div class="cards"><div class="card"><b>${sd.length}/${ts.length}</b>לו״ז בוצעו</div><div class="card"><b>${dd.length}/${td.length}</b>משימות בוצעו</div><div class="card"><b>${dur(dn)}</b>זמן שבוצע</div><div class="card"><b>${dur(plan)}</b>זמן מתוכנן</div></div>`;
+h+='<h3>לפי קטגוריה</h3>';let any=0;for(const k in CATS){const a=ts.filter(t=>(t.cat||'other')===k),b=td.filter(t=>t.cat===k),n=a.length+b.length;if(!n)continue;any=1;const d=a.filter(t=>t.done).length+b.filter(t=>t.done).length;
+h+=`<div style="margin:6px 0"><span class="dot" style="background:${CATS[k][1]}"></span>${CATS[k][0]}: ${d}/${n} בוצעו${a.length?` · ${dur(a.reduce((x,t)=>x+ +t.dur,0))} בלו״ז`:''}<div class="bar"><i style="width:${d/n*100}%;background:${CATS[k][1]}"></i></div></div>`}
+if(!any)h+='<p style="color:#888">אין עדיין פריטים ליום הזה</p>';
+h+='<h3>✅ מה הושלם</h3>';const done=[...sd.map(t=>fmt(t.start)+' '+t.title),...dd.map(t=>t.text)];h+=done.length?'<ul>'+done.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<p style="color:#888">עוד לא הושלם כלום</p>';
+const open_=[...ts.filter(t=>!t.done).map(t=>fmt(t.start)+' '+t.title),...td.filter(t=>!t.done).map(t=>t.text)];if(open_.length)h+='<h3>⏳ לא הושלם</h3><ul>'+open_.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>';
+$('#sum').innerHTML=h}
+const _r=render;render=function(){_r();renderT();renderSum()};
 const pday=()=>{const d=new Date();if(d.getHours()*60+d.getMinutes()<150)d.setDate(d.getDate()-1);d.setHours(0,0,0,0);return d};
 const wstart=()=>{const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-d.getDay());return d};
 let ws,lastP;
