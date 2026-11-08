@@ -1,44 +1,37 @@
 <!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>היומן של נתנאל</title><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#4f46e5"><link rel="apple-touch-icon" href="icon.svg">
 <style>
-:root{color-scheme:light;--bg:#f3f4f8;--text:#1f2937;--surface:#fff;--primary:#4f46e5;--header:#4f46e5;--header-text:#fff;--tab:#6366f1;--border:#e5e7eb;--hour:#c7c9d9;--muted:#6b7280;--soft:#eef2ff;--now:#fff7ed;--input-border:#ccc;--subtle:#f3f4f6;--done:#6b7280;--work:#2563eb;--work-bg:#dbeafe;--personal:#16a34a;--personal-bg:#dcfce7;--shop:#ea580c;--shop-bg:#ffedd5;--other:#6b7280;--other-bg:#f3f4f6}:root[data-theme="dark"]{color-scheme:dark;--bg:#111827;--text:#e5e7eb;--surface:#1f2937;--primary:#a5b4fc;--header:#27245a;--header-text:#f5f3ff;--tab:#39376e;--border:#374151;--hour:#536077;--muted:#b3becf;--soft:#2c3152;--now:#49371e;--input-border:#596579;--subtle:#303b4d;--done:#aab6c7;--work:#60a5fa;--work-bg:#1e3a5f;--personal:#4ade80;--personal-bg:#173f30;--shop:#fb923c;--shop-bg:#512e1d;--other:#a6b0c0;--other-bg:#374151}
-*{box-sizing:border-box}body{margin:0;font-family:system-ui,"Segoe UI",Arial;background:var(--bg);color:var(--text)}
-header{position:sticky;top:0;background:var(--header);color:var(--header-text);padding:12px;z-index:5;box-shadow:0 2px 8px #0002}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,"Segoe UI",Arial;background:#f3f4f8;color:#1f2937}
+header{position:sticky;top:0;background:#4f46e5;color:#fff;padding:12px;z-index:5;box-shadow:0 2px 8px #0002}
 h1{margin:0 0 8px;font-size:1.2rem}.nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-button{border:0;border-radius:10px;padding:8px 12px;font-size:.95rem;cursor:pointer;background:var(--surface);color:var(--primary)}
+button{border:0;border-radius:10px;padding:8px 12px;font-size:.95rem;cursor:pointer;background:#fff;color:#4f46e5}
 #date{flex:1;text-align:center;font-weight:600}main{max-width:700px;margin:auto;padding:8px}
-.slot{display:flex;min-height:44px;border-bottom:1px solid var(--border);background:var(--surface)}.slot.hour{border-top:1px solid var(--hour)}
-.t{width:58px;font-size:.8rem;color:var(--muted);padding:6px}.c{flex:1;padding:3px;cursor:pointer}
-.task{background:var(--soft);border-right:4px solid var(--primary);border-radius:8px;padding:6px 8px;margin:2px 0}.task b{display:block}.task small{color:var(--muted)}
-.now{background:var(--now)}dialog{border:0;border-radius:14px;width:min(92vw,400px)}dialog input,dialog textarea,dialog select{width:100%;padding:8px;margin:4px 0 10px;border:1px solid var(--input-border);border-radius:8px;font:inherit}
-.row{display:flex;gap:6px}.p{background:var(--header);color:var(--header-text)}.d{background:#dc2626;color:#fff}
+.slot{display:flex;min-height:44px;border-bottom:1px solid #e5e7eb;background:#fff}.slot.hour{border-top:1px solid #c7c9d9}
+.t{width:58px;font-size:.8rem;color:#6b7280;padding:6px}.c{flex:1;padding:3px;cursor:pointer}
+.task{background:#eef2ff;border-right:4px solid #4f46e5;border-radius:8px;padding:6px 8px;margin:2px 0}.task b{display:block}.task small{color:#555}
+.now{background:#fff7ed}dialog{border:0;border-radius:14px;width:min(92vw,400px)}dialog input,dialog textarea,dialog select{width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ccc;border-radius:8px;font:inherit}
+.row{display:flex;gap:6px}.p{background:#4f46e5;color:#fff}.d{background:#dc2626;color:#fff}
 #alert{display:none;position:fixed;inset:auto 10px 20px 10px;background:#111827;color:#fff;padding:16px;border-radius:14px;z-index:9;font-size:1.05rem}
-.tabs{display:flex;gap:6px;margin-top:8px}.tabs button{flex:1;background:var(--tab);color:#fff}.tabs button.on{background:var(--surface);color:var(--primary);font-weight:700}
-#todo{display:none;background:var(--surface);border-radius:12px;padding:10px}.add{display:flex;gap:6px}.add input{flex:1;padding:10px;border:1px solid var(--input-border);border-radius:10px;font:inherit}
-.it{display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid var(--border)}.it span{flex:1;cursor:pointer}.it.done span{text-decoration:line-through;color:var(--done)}.it input{width:22px;height:22px}.it button{padding:4px 8px;background:var(--subtle)}
-.week{display:flex;gap:4px;margin-top:8px;overflow-x:auto}.week button{flex:1;min-width:44px;padding:6px 2px;background:var(--tab);color:#fff;font-size:.8rem;line-height:1.2}.week button.on{background:var(--surface);color:var(--primary);font-weight:700}.week button.td{outline:2px solid #fbbf24}
+.tabs{display:flex;gap:6px;margin-top:8px}.tabs button{flex:1;background:#6366f1;color:#fff}.tabs button.on{background:#fff;color:#4f46e5;font-weight:700}
+#todo{display:none;background:#fff;border-radius:12px;padding:10px}.add{display:flex;gap:6px}.add input{flex:1;padding:10px;border:1px solid #ccc;border-radius:10px;font:inherit}
+.it{display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid #eee}.it span{flex:1;cursor:pointer}.it.done span{text-decoration:line-through;color:#9ca3af}.it input{width:22px;height:22px}.it button{padding:4px 8px;background:#f3f4f6}
+.week{display:flex;gap:4px;margin-top:8px;overflow-x:auto}.week button{flex:1;min-width:44px;padding:6px 2px;background:#6366f1;color:#fff;font-size:.8rem;line-height:1.2}.week button.on{background:#fff;color:#4f46e5;font-weight:700}.week button.td{outline:2px solid #fbbf24}
 .slot.q{min-height:34px;border-bottom-style:dashed}.slot.q .t{opacity:.6}
 .task{position:relative;padding-left:34px}.task .ck{position:absolute;left:6px;top:6px;width:22px;height:22px}.task.done{opacity:.55}.task.done b{text-decoration:line-through}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:.8rem;padding:6px 4px}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-left:4px;vertical-align:middle}
-.add select{padding:8px;border:1px solid var(--input-border);border-radius:10px;font:inherit}#sum{display:none;background:var(--surface);border-radius:12px;padding:12px}#sum h3{margin:12px 0 6px;font-size:1rem}
-.cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}.card{background:var(--soft);border-radius:10px;padding:10px;text-align:center}.card b{display:block;font-size:1.4rem;color:var(--primary)}
-.bar{height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-top:4px}.bar i{display:block;height:100%}#sum ul{padding-right:18px;margin:4px 0}
-
-dialog{background:var(--surface);color:var(--text)}dialog::backdrop{background:#0009}input,textarea,select{background:var(--surface);color:var(--text);accent-color:var(--primary)}input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}.add input{min-width:0}.task.done{opacity:1;color:var(--done)}.task.done small{color:var(--done)}.slot.q .t{opacity:1}button:focus-visible{outline:3px solid #fbbf24;outline-offset:2px}.heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.heading h1{margin:0}#themeToggle{font-size:1.2rem;min-width:44px;min-height:44px}
-</style></head><body>
-<header><div class="heading"><h1>📒 היומן של נתנאל</h1><button id="themeToggle" type="button" aria-label="הפעל מצב כהה" aria-pressed="false">🌙</button></div><div class="nav"><span id="date"></span><button id="notif">🔔 הפעל התראות</button></div><div class="week" id="week"></div><div class="tabs"><button id="tabS" class="on">לו"ז</button><button id="tabT">משימות</button><button id="tabU">סיכום</button></div></header>
-<main><div id="schedW"><div class="legend" id="legend"></div><div id="grid"></div></div><div id="todo"><div class="add"><input id="newT" placeholder="מה צריך לעשות היום?"><select id="newC"><option value="">ללא</option></select><button class="p" id="addT">הוסף</button></div><div id="list"></div><button id="moveT" style="margin-top:10px;width:100%">העבר משימות שלא הושלמו למחר ←</button></div><div id="sum"></div></main>
+.add select{padding:8px;border:1px solid #ccc;border-radius:10px;font:inherit}#sum{display:none;background:#fff;border-radius:12px;padding:12px}#sum h3{margin:12px 0 6px;font-size:1rem}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}.card{background:#eef2ff;border-radius:10px;padding:10px;text-align:center}.card b{display:block;font-size:1.4rem;color:#4f46e5}
+.bar{height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin-top:4px}.bar i{display:block;height:100%}#sum ul{padding-right:18px;margin:4px 0}
+</style><link rel="stylesheet" href="budget.css"></head><body>
+<header><h1>📒 היומן של נתנאל</h1><div class="nav"><span id="date"></span><button id="notif">🔔 הפעל התראות</button></div><div class="week" id="week"></div><div class="tabs"><button id="tabS" class="on">לו"ז</button><button id="tabT">משימות</button><button id="tabU">סיכום</button><button id="tabB">תקציב</button></div></header>
+<main><div id="schedW"><div class="legend" id="legend"></div><div id="grid"></div></div><div id="todo"><div class="add"><input id="newT" placeholder="מה צריך לעשות היום?"><select id="newC"><option value="">ללא</option></select><button class="p" id="addT">הוסף</button></div><div id="list"></div><button id="moveT" style="margin-top:10px;width:100%">העבר משימות שלא הושלמו למחר ←</button></div><div id="sum"></div><section id="budget" hidden></section></main>
 <dialog id="dlg"><form method="dialog" id="f"><h3 id="dt">משימה</h3>
 <label>כותרת<input id="title" required></label><label>שעת התחלה<select id="start"></select></label>
 <label>משך<select id="dur"></select></label><label>קטגוריה<select id="cat"></select></label><label>הערה<textarea id="note" rows="2"></textarea></label>
 <div class="row"><button class="p" value="save">שמור</button><button class="d" id="del" value="del">מחק</button><button value="cancel" formnovalidate>ביטול</button></div></form></dialog>
 <div id="alert"></div>
 <script>
-const $=s=>document.querySelector(s);
-function applyTheme(theme){const dark=theme==='dark';document.documentElement.dataset.theme=dark?'dark':'light';$('#themeToggle').textContent=dark?'☀️':'🌙';$('#themeToggle').setAttribute('aria-label',dark?'הפעל מצב בהיר':'הפעל מצב כהה');$('#themeToggle').setAttribute('aria-pressed',String(dark));$('meta[name="theme-color"]').content=dark?'#27245a':'#4f46e5'}
-applyTheme(localStorage.getItem('theme'));
-$('#themeToggle').onclick=()=>{const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';localStorage.setItem('theme',theme);applyTheme(theme)};
-let cur=new Date();cur.setHours(0,0,0,0);
+const $=s=>document.querySelector(s);let cur=new Date();cur.setHours(0,0,0,0);
 // planner day starts 08:00; hours 0-2 belong to previous day
 
 const key=d=>d.toISOString().slice(0,10).replace(/T.*/,'')
@@ -85,7 +78,7 @@ function addT(){const v=$('#newT').value.trim();if(!v)return;const o=lt(),k=dk(c
 $('#addT').onclick=addT;$('#newT').onkeydown=e=>{if(e.key==='Enter')addT()};
 $('#moveT').onclick=()=>{const o=lt(),k=dk(cur),a=o[k]||[],u=a.filter(x=>!x.done);if(!u.length)return alert('אין משימות פתוחות');
 const n=new Date(cur);n.setDate(n.getDate()+1);const nk=dk(n);o[nk]=(o[nk]||[]).concat(u);o[k]=a.filter(x=>x.done);st(o);renderT();alert(`הועברו ${u.length} משימות למחר`)};
-const tab=t=>{[['#schedW','#tabS'],['#todo','#tabT'],['#sum','#tabU']].forEach(([p,b],i)=>{$(p).style.display=i===t?'block':'none';$(b).classList.toggle('on',i===t)})};
+const tab=t=>{[['#schedW','#tabS'],['#todo','#tabT'],['#sum','#tabU'],['#budget','#tabB']].forEach(([p,b],i)=>{$(p).hidden=i!==t;$(p).style.display=i===t?'block':'none';$(b).classList.toggle('on',i===t)})};
 $('#tabS').onclick=()=>tab(0);$('#tabT').onclick=()=>tab(1);$('#tabU').onclick=()=>tab(2);
 const dur=m=>m<60?m+' דק׳':Math.floor(m/60)+' שע׳'+(m%60?' ו־'+m%60+' דק׳':'');
 const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -112,4 +105,4 @@ x.onclick=()=>{cur=d;render()};b.append(x)}$('#moveT').disabled=cur.getDay()===6
 const _r2=render;render=function(){if(ws){_r2();renderW()}};
 setInterval(weekCheck,60000);weekCheck();check();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
-</script></body></html>
+</script><script src="budget.js"></script></body></html>
