@@ -1,8 +1,11 @@
 (()=>{'use strict';
-// ===== עוזר אישי ביומן: צ'אט + מיקרופון + Gemini + תזכורות =====
+// ===== עוזר אישי ביומן: צאט + מיקרופון + תזכורות =====
 const Q=s=>document.querySelector(s);
-const LS={chat:'assistantChat',key:'assistantKey',model:'assistantModel',rem:'assistantRem',week:'assistantWeek',remOn:'assistantRemind'};
-const MODELS=[['gemini-flash-latest','Gemini Flash (העדכני ביותר) – מומלץ'],['gemini-3.8-flash','Gemini 3.8 Flash'],['gemini-3.5-flash-lite','Gemini 3.5 Flash-Lite (זול ומהיר)']];
+const LS={chat:'assistantChat',rem:'assistantRem',week:'assistantWeek',remOn:'assistantRemind',owner:'assistantOwner',device:'assistantDevice',quota:'assistantQuota'};
+// כתובת השרת של העוזר (מגביל שימוש) – מקום אחד לשנות
+const PROXY=window.ASSISTANT_PROXY||'https://netanel-planner-ai.onrender.com/api/gemini';
+const QUOTA_URL=PROXY.replace(/\/gemini$/,'/quota');
+try{localStorage.removeItem('assistantKey');localStorage.removeItem('assistantModel')}catch(e){} // מפתח אישי מגרסה קודמת – כבר לא בשימוש
 const B=()=>window.BudgetAPI;
 const pad=n=>String(n).padStart(2,'0');
 const ymNow=()=>{const d=new Date();return`${d.getFullYear()}-${pad(d.getMonth()+1)}`};
@@ -22,7 +25,7 @@ const dkey=d=>`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; // אותו
 const plannerDay=()=>{const d=new Date();if(d.getHours()*60+d.getMinutes()<150)d.setDate(d.getDate()-1);d.setHours(0,0,0,0);const w=weekStart();return d<w?w:d};
 const weekDays=()=>{const w=weekStart();return Array.from({length:7},(_,i)=>{const d=new Date(w);d.setDate(d.getDate()+i);return d})};
 function weeklyReset(){const k=dkey(weekStart());if(localStorage.getItem(LS.week)!==k){localStorage.setItem(LS.week,k);localStorage.removeItem(LS.chat);localStorage.removeItem(LS.rem);return true}return false}
-// לא נוגעים ב-budget, במפתח ה-API, בדגם או בהעדפות
+// לא נוגעים ב-budget, בקוד האישי, במזהה המכשיר או בהעדפות
 
 // ---------- נתוני היומן ----------
 const lp=()=>J('planner',{}),sp=o=>W('planner',o),ltd=()=>J('todos',{}),std=o=>W('todos',o);
@@ -118,7 +121,7 @@ function runTool(name,args){try{const f=EXEC[name];return f?f(args||{}):fail('כ
 // ---------- הנחיית מערכת ----------
 function systemPrompt(){const now=new Date(),C=B()?.categories||{},S=B()?.SUGG||{};
  const pend=Object.entries(J(LS.rem,{})).filter(([k,v])=>!v.resolved&&v.asked).map(([k])=>k);
- return `אתה "העוזר" ביומן האישי של נתנאל – אפליקציית לו"ז, משימות ותקציב בעברית. ענה תמיד בעברית, בקצרה ובחום, בלי מונחים טכניים.
+ return `אתה "העוזר" ביומן האישי של נתנאל – אפליקציית לו"ז, משימות ותקציב בעברית. ענה תמיד בעברית, בקצרה ובחום, בלי מונחים טכניים. אם שואלים מי אתה, איזה מודל או איזו חברה עומדת מאחוריך – ענה רק שאתה "העוזר שלי" של היומן, ואל תזכיר שום חברה, מודל או טכנולוגיה.
 עכשיו: ${now.toLocaleString('he-IL',{weekday:'long',year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}. היום ביומן: ${isoOf(plannerDay())} (יום ${DN[plannerDay().getDay()]}).
 ימי השבוע הנוכחי: ${weekDays().map(d=>DN[d.getDay()]+'='+isoOf(d)).join(', ')}.
 כללים:
@@ -141,10 +144,16 @@ ${pend.length?'תזכורות פתוחות ששאלת עליהן (אם המשת�
 ${JSON.stringify({planner:plannerSnapshot(),budget:budgetSummary()})}`}
 
 // ---------- Gemini ----------
-const getKey=()=>localStorage.getItem(LS.key)||'',getModel=()=>localStorage.getItem(LS.model)||MODELS[0][0];
-async function gemini(contents,extra={}){const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(getModel())}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':getKey()},body:JSON.stringify({contents,...extra})});
- let j=null;try{j=await r.json()}catch(e){}
- if(!r.ok){const msg=j?.error?.message||'';const err=new Error(r.status===400&&/key/i.test(msg)?'המפתח לא תקין. בדוק אותו בהגדרות ⚙️':r.status===403?'למפתח אין הרשאה. ודא שהעתקת מפתח מ-Google AI Studio':r.status===429?'עברת את מכסת השימוש של המפתח. נסה שוב בעוד כמה דקות':r.status===404?'הדגם לא זמין. בחר דגם אחר בהגדרות ⚙️':'שגיאה מהשרת ('+r.status+') '+msg);throw err}
+const getOwner=()=>localStorage.getItem(LS.owner)||'';
+function deviceId(){let d=localStorage.getItem(LS.device);if(!d||!/^[A-Za-z0-9_-]{8,80}$/.test(d)){d=uid().replace(/[^A-Za-z0-9-]/g,'');localStorage.setItem(LS.device,d)}return d}
+const hdrs=turn=>{const h={'X-Device-Id':deviceId()};if(turn)h['X-Turn-Id']=turn;const o=getOwner();if(o)h['X-Owner-Code']=o;return h};
+function saveQuota(r){const rem=r.headers.get('X-Remaining');if(rem==null)return;W(LS.quota,{rem,limit:+r.headers.get('X-Limit')||50,owner:r.headers.get('X-Owner')==='1',day:isoNow()});quotaUI()}
+const newTurn=()=>uid().replace(/[^A-Za-z0-9-]/g,'');
+async function gemini(contents,extra={},turn=newTurn()){let r;
+ try{r=await fetch(PROXY,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json',...hdrs(turn)},body:JSON.stringify({contents,...extra})})}
+ catch(e){throw new Error('אין חיבור לעוזר כרגע. בדוק את האינטרנט ונסה שוב.')}
+ saveQuota(r);let j=null;try{j=await r.json()}catch(e){}
+ if(!r.ok){const code=j?.error;const err=new Error(code==='limit'?`הגעת ל-${j.limit||50} הודעות להיום, נתראה מחר 🙂`:code==='busy'?'העוזר עמוס כרגע, נסה שוב עוד מעט':code==='turn'?'turn':'משהו השתבש בשרת ('+r.status+'). נסה שוב עוד מעט.');err.code=code;throw err}
  return j}
 function trimApi(api){const MAX=40;if(api.length<=MAX)return api;let i=api.length-MAX;while(i<api.length&&!(api[i].role==='user'&&api[i].parts.some(p=>p.text!=null)))i++;return api.slice(i)}
 
@@ -159,14 +168,13 @@ const pane=document.createElement('section');pane.id='as-pane';pane.hidden=true;
 pane.innerHTML=`<div class="as-head"><button type="button" class="as-x" aria-label="סגור">✕</button><h2>🤖 העוזר שלי</h2><button type="button" class="as-gear" aria-label="הגדרות">⚙️</button></div>
 <div class="as-body"><div class="as-msgs" aria-live="polite"></div>
 <div class="as-set" hidden><h3>⚙️ הגדרות העוזר</h3>
-<p>כדי שהעוזר יבין עברית חופשית הוא משתמש ב-Gemini של גוגל. צריך מפתח אישי (חינם לשימוש בסיסי):</p>
-<ol><li>היכנס ל-<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> עם חשבון הגוגל שלך.</li><li>לחץ <b>Create API key</b> והעתק את המפתח.</li><li>הדבק אותו כאן ולחץ שמור.</li></ol>
-<p class="as-kstat"></p><label><span class="as-klabel">מפתח API</span><input type="password" class="as-key" autocomplete="off" placeholder="AIza…" dir="ltr"></label>
-<label>דגם<select class="as-model">${MODELS.map(([k,n])=>`<option value="${k}">${n}</option>`).join('')}</select></label>
+<p class="as-quota as-small"></p>
+<p class="as-kstat"></p><label><span class="as-klabel">קוד אישי (לא חובה)</span><input type="password" class="as-key" autocomplete="off" placeholder="הדבק כאן את הקוד האישי" dir="ltr"></label>
+<p class="as-small">הקוד האישי מבטל את מגבלת ההודעות היומית. מי שאין לו קוד – העוזר עובד לו רגיל, עד 50 הודעות ביום.</p>
 <label class="as-chk"><input type="checkbox" class="as-rem"> תזכורות: לשאול אותי אם ביצעתי משימות</label>
-<div class="as-row"><button type="button" class="as-save">שמור</button><button type="button" class="as-delkey">🗑️ הסר מפתח</button></div>
+<div class="as-row"><button type="button" class="as-save">שמור</button><button type="button" class="as-delkey">🗑️ הסר קוד</button></div>
 <button type="button" class="as-clear">🧹 נקה את השיחה</button>
-<p class="as-small">🔒 המפתח נשמר רק בטלפון הזה ולא נמחק באיפוס השבועי. ההודעות נשלחות ישירות לגוגל. השיחה מתאפסת כל מוצאי שבת ב-00:00 ביחד עם היומן. נתוני התקציב לא נמחקים.</p></div></div>
+<p class="as-small">🔒 הקוד האישי נשמר רק בטלפון הזה ולא נמחק באיפוס השבועי. ההודעות עוברות דרך השרת של היומן. השיחה מתאפסת כל מוצאי שבת ב-00:00 ביחד עם היומן. נתוני התקציב לא נמחקים.</p></div></div>
 <div class="as-typing" hidden>העוזר חושב…</div>
 <form class="as-in"><button type="button" class="as-mic" aria-label="הקלטה">🎤</button><textarea rows="1" placeholder="כתוב או הקלט מה לעשות…" aria-label="הודעה"></textarea><button type="submit" class="as-send" aria-label="שלח">➤</button></form>`;
 document.body.append(pane);
@@ -174,16 +182,20 @@ const msgsEl=pane.querySelector('.as-msgs'),setEl=pane.querySelector('.as-set'),
 const md=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
 let unread=+(localStorage.getItem('assistantUnread')||0);
 function badge(){const b=Q('#as-badge');b.hidden=!unread;b.textContent=unread>9?'9+':unread}
-function draw(){if(pane.hidden)return;const welcome=!chat.msgs.length?`<div class="as-m bot">שלום נתנאל! 👋 אני העוזר שלך ביומן.<br>אפשר לכתוב או להקליט לי, למשל:<br>• "שילמתי 200 שקל על דלק"<br>• "תוסיף מחר בעשר פגישה עם רואה חשבון"<br>• "קיבלתי משכורת 9000"<br>• "מה יש לי היום?"${getKey()?'':'<br><br>⚠️ קודם צריך להגדיר מפתח – לחץ ⚙️ למעלה.'}</div>`:'';
+function draw(){if(pane.hidden)return;const welcome=!chat.msgs.length?`<div class="as-m bot">שלום נתנאל! 👋 אני העוזר שלך ביומן.<br>אפשר לכתוב או להקליט לי, למשל:<br>• "שילמתי 200 שקל על דלק"<br>• "תוסיף מחר בעשר פגישה עם רואה חשבון"<br>• "קיבלתי משכורת 9000"<br>• "מה יש לי היום?"</div>`:'';
  msgsEl.innerHTML=welcome+chat.msgs.map(m=>`<div class="as-m ${m.role}" data-id="${m.id}">${md(m.text)}${m.btns?`<div class="as-btns">${m.btns.map((b,i)=>`<button type="button" data-i="${i}" ${m.answered?'disabled':''} class="${b.a.t==='later'?'':'ok'}">${esc(b.l)}</button>`).join('')}</div>`:''}</div>`).join('');
  msgsEl.scrollTop=msgsEl.scrollHeight}
-function openPane(){pane.hidden=false;fab.hidden=true;unread=0;localStorage.setItem('assistantUnread',0);badge();setEl.hidden=!!getKey();msgsEl.hidden=!setEl.hidden;loadSet();draw();if(getKey())setTimeout(()=>ta.focus(),50)}
+function openPane(){pane.hidden=false;fab.hidden=true;unread=0;localStorage.setItem('assistantUnread',0);badge();setEl.hidden=true;msgsEl.hidden=false;draw();setTimeout(()=>ta.focus(),50)}
 function closePane(){pane.hidden=true;fab.hidden=false;stopMic()}
 fab.onclick=openPane;pane.querySelector('.as-x').onclick=closePane;
-pane.querySelector('.as-gear').onclick=()=>{const show=setEl.hidden;setEl.hidden=!show;msgsEl.hidden=show;loadSet();if(!show)draw()};
-function loadSet(){const k=getKey();pane.querySelector('.as-key').value='';pane.querySelector('.as-kstat').innerHTML=k?'✅ מפתח שמור: <span dir="ltr">••••'+esc(k.slice(-4))+'</span>':'⚠️ עדיין לא נשמר מפתח';pane.querySelector('.as-kstat').className='as-kstat '+(k?'yes':'no');pane.querySelector('.as-klabel').textContent=k?'להחלפת המפתח – הדבק מפתח חדש (אפשר להשאיר ריק)':'מפתח API';pane.querySelector('.as-delkey').hidden=!k;pane.querySelector('.as-model').value=getModel();pane.querySelector('.as-rem').checked=localStorage.getItem(LS.remOn)!=='off'}
-pane.querySelector('.as-save').onclick=()=>{const k=pane.querySelector('.as-key').value.trim();if(k)localStorage.setItem(LS.key,k);localStorage.setItem(LS.model,pane.querySelector('.as-model').value);localStorage.setItem(LS.remOn,pane.querySelector('.as-rem').checked?'on':'off');setEl.hidden=true;msgsEl.hidden=false;if(!k&&!getKey())push({role:'err',text:'לא הוזן מפתח – העוזר יוכל רק להזכיר משימות. כדי לדבר איתו צריך מפתח.'});else draw()};
-pane.querySelector('.as-delkey').onclick=()=>{if(confirm('להסיר את המפתח מהטלפון? העוזר לא יוכל לענות עד שתדביק מפתח חדש.')){localStorage.removeItem(LS.key);loadSet()}};
+pane.querySelector('.as-gear').onclick=()=>{const show=setEl.hidden;setEl.hidden=!show;msgsEl.hidden=show;loadSet();if(show)refreshQuota();else draw()};
+function quotaUI(){const el=pane.querySelector('.as-quota');if(!el)return;const q=J(LS.quota,null);
+ el.textContent=!q||q.day!==isoNow()?'':q.owner?'✨ ללא הגבלת הודעות (קוד אישי פעיל)':`נשארו לך היום ${q.rem} מתוך ${q.limit} הודעות`}
+async function refreshQuota(){try{const r=await fetch(QUOTA_URL,{cache:'no-store',headers:hdrs()});saveQuota(r);const j=await r.json();
+ if(getOwner()){const st=pane.querySelector('.as-kstat');st.innerHTML=j.owner?'✅ קוד אישי פעיל – ללא הגבלה':'⚠️ הקוד האישי לא נכון – העוזר עובד עם המגבלה הרגילה';st.className='as-kstat '+(j.owner?'yes':'no')}}catch(e){}}
+function loadSet(){const k=getOwner();pane.querySelector('.as-key').value='';pane.querySelector('.as-kstat').innerHTML=k?'✅ קוד אישי שמור: <span dir="ltr">••••'+esc(k.slice(-2))+'</span>':'אין קוד אישי (לא חובה)';pane.querySelector('.as-kstat').className='as-kstat '+(k?'yes':'');pane.querySelector('.as-klabel').textContent=k?'להחלפת הקוד – הדבק קוד חדש (אפשר להשאיר ריק)':'קוד אישי (לא חובה)';pane.querySelector('.as-delkey').hidden=!k;pane.querySelector('.as-rem').checked=localStorage.getItem(LS.remOn)!=='off';quotaUI()}
+pane.querySelector('.as-save').onclick=()=>{const k=pane.querySelector('.as-key').value.trim();if(k){localStorage.setItem(LS.owner,k);localStorage.removeItem(LS.quota)}localStorage.setItem(LS.remOn,pane.querySelector('.as-rem').checked?'on':'off');setEl.hidden=true;msgsEl.hidden=false;draw()};
+pane.querySelector('.as-delkey').onclick=()=>{if(confirm('להסיר את הקוד האישי מהטלפון? העוזר ימשיך לעבוד עם מגבלה של 50 הודעות ביום.')){localStorage.removeItem(LS.owner);localStorage.removeItem(LS.quota);loadSet();refreshQuota()}};
 pane.querySelector('.as-clear').onclick=()=>{if(confirm('לנקות את כל השיחה?')){chat={msgs:[],api:[]};saveChat();setEl.hidden=true;msgsEl.hidden=false;draw()}};
 ta.addEventListener('input',()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,120)+'px'});
 ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();pane.querySelector('form').requestSubmit()}});
@@ -191,11 +203,11 @@ pane.querySelector('form').onsubmit=e=>{e.preventDefault();const t=ta.value.trim
 msgsEl.addEventListener('click',e=>{const b=e.target.closest('.as-btns button');if(!b)return;const m=chat.msgs.find(x=>x.id===b.closest('.as-m').dataset.id);if(!m||m.answered)return;answerBtn(m,m.btns[+b.dataset.i])});
 
 let busy=false;
-async function send(text){if(busy)return;push({role:'user',text});
- if(!getKey()){push({role:'err',text:'כדי שאוכל לעשות דברים בשבילך צריך להגדיר מפתח Gemini. לחץ ⚙️ למעלה – יש שם הסבר קצר.'});return}
+async function send(text,turn){if(busy)return;push({role:'user',text});turn=turn||newTurn();
  busy=true;typing.hidden=false;
  try{const api=trimApi(chat.api.concat({role:'user',parts:[{text}]}));let changed=[];
-  for(let step=0;step<8;step++){const j=await gemini(api,{systemInstruction:{parts:[{text:systemPrompt()}]},tools:[{functionDeclarations:TOOLS}]});
+  for(let step=0;step<8;step++){let j;try{j=await gemini(api,{systemInstruction:{parts:[{text:systemPrompt()}]},tools:[{functionDeclarations:TOOLS}]},turn)}
+   catch(e){if(e.code==='turn'&&step>0){api.push({role:'model',parts:[{text:'בוצע ✅'}]});push({role:'bot',text:'בוצע ✅'});break}throw e}
    const c=j?.candidates?.[0]?.content;if(!c||!c.parts){const why=j?.promptFeedback?.blockReason||j?.candidates?.[0]?.finishReason;throw new Error('לא התקבלה תשובה'+(why?' ('+why+')':''))}
    api.push({role:'model',parts:c.parts});const calls=c.parts.filter(p=>p.functionCall);
    if(!calls.length){const txt=c.parts.filter(p=>p.text&&!p.thought).map(p=>p.text).join('').trim();push({role:'bot',text:txt||(changed.length?'בוצע ✅':'…')});break}
@@ -203,7 +215,7 @@ async function send(text){if(busy)return;push({role:'user',text});
    api.push({role:'user',parts:resp});
    if(step===7)push({role:'bot',text:'בוצע ✅'})}
   chat.api=trimApi(api);saveChat()}
- catch(e){push({role:'err',text:'⚠️ '+(e.message==='Failed to fetch'?'אין חיבור לאינטרנט כרגע. נסה שוב.':e.message)})}
+ catch(e){push({role:'err',text:(e.code==='limit'?'':'⚠️ ')+(e.code==='turn'?'העוזר עמוס כרגע, נסה שוב עוד מעט':e.message)})}
  finally{busy=false;typing.hidden=true}}
 
 // ---------- מיקרופון ----------
@@ -212,10 +224,10 @@ function micUI(on,label){micB.classList.toggle('on',on);micB.textContent=on?'⏹
 function stopMic(){try{rec&&rec.stop()}catch(e){}try{mr&&mr.state==='recording'&&mr.stop()}catch(e){}}
 function noMic(){push({role:'err',text:'הדפדפן הזה לא תומך בהקלטה ישירה 🎤. אפשר ללחוץ על אייקון המיקרופון במקלדת של הטלפון ולהכתיב – הטקסט ייכתב בתיבה ואז לוחצים ➤.'})}
 micB.onclick=()=>{if(micB.classList.contains('on')){stopMic();return}
- if(SR&&!srBroken)return startSR();if(window.MediaRecorder&&navigator.mediaDevices?.getUserMedia&&getKey())return startRec();noMic()};
+ if(SR&&!srBroken)return startSR();if(window.MediaRecorder&&navigator.mediaDevices?.getUserMedia)return startRec();noMic()};
 function startSR(){rec=new SR();rec.lang='he-IL';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;let final='',errored=false;
  rec.onresult=e=>{let interim='';final='';for(const r of e.results){if(r.isFinal)final+=r[0].transcript;else interim+=r[0].transcript}ta.value=(final+interim).trim()};
- rec.onerror=e=>{errored=true;micUI(false);if(e.error==='service-not-allowed'||e.error==='network'||e.error==='language-not-supported'){srBroken=true;if(window.MediaRecorder&&getKey())push({role:'err',text:'זיהוי הדיבור של הדפדפן לא זמין כאן. לחץ שוב על 🎤 – ההקלטה תישלח לעוזר לתמלול.'});else noMic()}
+ rec.onerror=e=>{errored=true;micUI(false);if(e.error==='service-not-allowed'||e.error==='network'||e.error==='language-not-supported'){srBroken=true;if(window.MediaRecorder)push({role:'err',text:'זיהוי הדיבור של הדפדפן לא זמין כאן. לחץ שוב על 🎤 – ההקלטה תישלח לעוזר לתמלול.'});else noMic()}
   else if(e.error==='not-allowed')push({role:'err',text:'אין הרשאה למיקרופון. אשר גישה למיקרופון בהגדרות הדפדפן ונסה שוב.'});
   else if(e.error==='no-speech')push({role:'err',text:'לא שמעתי כלום 🙂 נסה שוב.'})};
  rec.onend=()=>{micUI(false);rec=null;const t=ta.value.trim();if(!errored&&final.trim()&&t){ta.value='';send(t)}};
@@ -225,8 +237,9 @@ async function startRec(){let stream;try{stream=await navigator.mediaDevices.get
  mr.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());micUI(false);const type=(mr.mimeType||'audio/webm').split(';')[0];const blob=new Blob(chunks,{type});mr=null;if(blob.size<1500)return;
   typing.hidden=false;typing.textContent='מתמלל…';
   try{const b64=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]);fr.onerror=rej;fr.readAsDataURL(blob)});
-   const j=await gemini([{role:'user',parts:[{inlineData:{mimeType:type,data:b64}},{text:'תמלל את ההקלטה בעברית. החזר רק את הטקסט שנאמר, בלי שום תוספת.'}]}]);
-   const t=(j?.candidates?.[0]?.content?.parts||[]).filter(p=>p.text&&!p.thought).map(p=>p.text).join('').trim();typing.hidden=true;typing.textContent='העוזר חושב…';if(t)send(t);else push({role:'err',text:'לא הצלחתי להבין את ההקלטה, נסה שוב.'})}
+   const turn=newTurn(); // התמלול וההודעה שאחריו נספרים כהודעה אחת
+   const j=await gemini([{role:'user',parts:[{inlineData:{mimeType:type,data:b64}},{text:'תמלל את ההקלטה בעברית. החזר רק את הטקסט שנאמר, בלי שום תוספת.'}]}],{},turn);
+   const t=(j?.candidates?.[0]?.content?.parts||[]).filter(p=>p.text&&!p.thought).map(p=>p.text).join('').trim();typing.hidden=true;typing.textContent='העוזר חושב…';if(t)send(t,turn);else push({role:'err',text:'לא הצלחתי להבין את ההקלטה, נסה שוב.'})}
   catch(e){typing.hidden=true;typing.textContent='העוזר חושב…';push({role:'err',text:'⚠️ '+e.message})}};
  mr.start();micUI(true,'מקליט… לחץ ⏹ כשסיימת')}
 
