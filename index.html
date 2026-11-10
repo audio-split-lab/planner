@@ -22,7 +22,7 @@ button{border:0;border-radius:10px;padding:8px 12px;font-size:.95rem;cursor:poin
 .add select{padding:8px;border:1px solid #ccc;border-radius:10px;font:inherit}#sum{display:none;background:#fff;border-radius:12px;padding:12px}#sum h3{margin:12px 0 6px;font-size:1rem}
 .cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}.card{background:#eef2ff;border-radius:10px;padding:10px;text-align:center}.card b{display:block;font-size:1.4rem;color:#4f46e5}
 .bar{height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin-top:4px}.bar i{display:block;height:100%}#sum ul{padding-right:18px;margin:4px 0}
-</style><link rel="stylesheet" href="budget.css"></head><body>
+</style><link rel="stylesheet" href="budget.css"><link rel="stylesheet" href="assistant.css"></head><body>
 <header><h1>📒 היומן של נתנאל</h1><div class="nav"><span id="date"></span><button id="notif">🔔 הפעל התראות</button></div><div class="week" id="week"></div><div class="tabs"><button id="tabS" class="on">לו"ז</button><button id="tabT">משימות</button><button id="tabU">סיכום</button><button id="tabB">תקציב</button></div></header>
 <main><div id="schedW"><div class="legend" id="legend"></div><div id="grid"></div></div><div id="todo"><div class="add"><input id="newT" placeholder="מה צריך לעשות היום?"><select id="newC"><option value="">ללא</option></select><button class="p" id="addT">הוסף</button></div><div id="list"></div><button id="moveT" style="margin-top:10px;width:100%">העבר משימות שלא הושלמו למחר ←</button></div><div id="sum"></div><section id="budget" hidden></section></main>
 <dialog id="dlg"><form method="dialog" id="f"><h3 id="dt">משימה</h3>
@@ -105,4 +105,4 @@ x.onclick=()=>{cur=d;render()};b.append(x)}$('#moveT').disabled=cur.getDay()===6
 const _r2=render;render=function(){if(ws){_r2();renderW()}};
 setInterval(weekCheck,60000);weekCheck();check();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
-</script><script src="budget.js"></script></body></html>
+</script><script src="budget.js"></script><script src="assistant.js"></script></body></html>

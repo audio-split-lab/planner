@@ -44,5 +44,6 @@ const draw=()=>{const q=inp.value.trim();const l=q?all.filter(x=>x.includes(q)):
 d.querySelector('.bp-cat').textContent=(categories[cat]?categories[cat][0]:'')+' · הצעות:';
 inp.value=target.value||'';inp.oninput=draw;inp.onkeydown=ev=>{if(ev.key==='Enter'){ev.preventDefault();done(inp.value)}};d.querySelector('.bp-ok').onclick=()=>done(inp.value);
 draw();d.showModal();d.onclose=()=>{target._skip=true;setTimeout(()=>target._skip=false,300)}}
+window.BudgetAPI={categories,SUGG,render:()=>render(),current:()=>ym(today())};
 })();
 
