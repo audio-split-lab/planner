@@ -1,0 +1,10 @@
+{
+  "name": "planner-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gemini proxy with per-user daily limits for the planner assistant",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED"
+}
