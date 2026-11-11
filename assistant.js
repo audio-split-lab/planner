@@ -1,7 +1,7 @@
 (()=>{'use strict';
 // ===== עוזר אישי ביומן: צאט + מיקרופון + תזכורות =====
 const Q=s=>document.querySelector(s);
-const LS={chat:'assistantChat',rem:'assistantRem',week:'assistantWeek',remOn:'assistantRemind',owner:'assistantOwner',device:'assistantDevice',quota:'assistantQuota'};
+const LS={chat:'assistantChat',rem:'assistantRem',week:'assistantWeek',remOn:'assistantRemind',owner:'assistantOwner',device:'assistantDevice',quota:'assistantQuota',brief:'assistantBrief',briefDay:'assistantBriefDay'};
 // כתובת השרת של העוזר (מגביל שימוש) – מקום אחד לשנות
 const PROXY=window.ASSISTANT_PROXY||'https://netanel-planner-ai.onrender.com/api/gemini';
 const QUOTA_URL=PROXY.replace(/\/gemini$/,'/quota');
@@ -61,16 +61,34 @@ function budgetSummary(){const d=rb(),m=ymNow(),a=monthRows(d,m),C=B()?.categori
     fixed:d.recurring.filter(r=>!r.end||r.end>=m).map(r=>({id:r.id,kind:r.kind,description:r.description,amount:r.amount,category:r.category,day:r.day,start:r.start})),
     investments:d.holdings.map(h=>({id:h.id,name:h.name,type:h.type,invested:h.invested,value:h.value}))}}
 function plannerSnapshot(){const all=lp(),td=ltd();return weekDays().map(d=>{const k=dkey(d);return{date:isoOf(d),day:DN[d.getDay()],today:k===dkey(plannerDay()),
-  tasks:(all[k]||[]).map(t=>({id:t.id,title:t.title,start:fmtM(t.start),end:fmtM(t.start+ +t.dur),duration_min:+t.dur,category:t.cat,note:t.note||'',done:!!t.done})),
+  tasks:(all[k]||[]).map(t=>({id:t.id,title:t.title,start:fmtM(t.start),end:fmtM(t.start+ +t.dur),duration_min:+t.dur,category:t.cat,note:t.note||'',done:!!t.done,...(t.rid?{repeats_this_week:t.rid}:{})})),
   todos:(td[k]||[]).map((t,i)=>({index:i,text:t.text,category:t.cat||'',done:!!t.done}))}})}
+
+// ---------- משימה שחוזרת השבוע ----------
+function repeatOn(all,o,dates,skipKey){const added=[],skipped=[];let n=0;for(const ds of dates){const g=getDay(ds);if(g.err){skipped.push({date:ds,reason:g.err});continue}const k=dkey(g.d);if(k===skipKey)continue;const sat=g.d.getDay()===6,day=DN[g.d.getDay()];
+  if(sat&&o.start>=24*60){skipped.push({day,reason:'בשבת היומן נסגר ב-23:45'});continue}const du=sat&&o.start+o.dur>24*60?Math.max(15,24*60-o.start):o.dur;
+  const arr=all[k]||[];if(arr.some(x=>x.start<o.start+du&&o.start<x.start+ +x.dur)){skipped.push({day,reason:'המשבצת תפוסה'});continue}
+  arr.push({...o,id:o.id+(++n),dur:du});arr.sort((x,y)=>x.start-y.start);all[k]=arr;added.push(day)}return{added,skipped}}
+// ---------- תובנות תקציב (מקומי) ----------
+function catSpend(d,m,upto){const C=B()?.categories||{},o={};for(const k in C)o[k]=0;let tot=0;
+ for(const e of monthRows(d,m)){if(e.kind!=='expense')continue;const day=e.fixed?+e.day||1:+String(e.date).slice(8,10);if(upto&&day>upto)continue;const k=o[e.category]!=null?e.category:'other';o[k]=(o[k]||0)+ +e.amount;tot+= +e.amount}
+ for(const k in o)o[k]=Math.round(o[k]*100)/100;return{cats:o,total:Math.round(tot*100)/100}}
+function budgetInsights(){const d=rb(),m=ymNow(),now=new Date(),day=now.getDate(),dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate(),C=B()?.categories||{},r=n=>Math.round(n);
+ const p1=prevYm(m),p2=prevYm(p1),p3=prevYm(p2),cur=catSpend(d,m),same=catSpend(d,p1,day),full=[p1,p2,p3].map(x=>catSpend(d,x)),withData=full.filter(x=>x.total>0);
+ const cats=Object.keys(C).map(k=>{const c=cur.cats[k]||0,s2=same.cats[k]||0,avg=withData.length?r(withData.reduce((a,x)=>a+(x.cats[k]||0),0)/withData.length):null,target=+(d.limits[m]?.[k]||0)||null;
+  return{category:k,name:C[k][0],this_month:c,prev_month_same_point:s2,prev_month_full:full[0].cats[k]||0,avg_prev_months:avg,projected_month_end:r(c/day*dim),change_vs_prev_same_point_pct:s2?r((c/s2-1)*100):null,target,target_used_pct:target?r(c/target*100):null,unusually_high:s2>0&&c>=1.5*s2&&c-s2>=50}}).filter(x=>x.this_month||x.prev_month_full||x.target);
+ const hi=[];cats.filter(x=>x.unusually_high).sort((a,b)=>(b.this_month-b.prev_month_same_point)-(a.this_month-a.prev_month_same_point)).forEach(x=>hi.push(`${x.name}: ${r(x.this_month)} ₪ עד עכשיו – פי ${(x.this_month/x.prev_month_same_point).toFixed(1)} מאותה תקופה בחודש שעבר (${r(x.prev_month_same_point)} ₪)`));
+ cats.filter(x=>x.target_used_pct>=80).forEach(x=>hi.push(`${x.name}: ניצלת ${x.target_used_pct}% מהיעד (${r(x.this_month)} מתוך ${r(x.target)} ₪)`));
+ const bs=budgetSummary();return{month:m,day_of_month:day,days_in_month:dim,months_compared:[p1,p2,p3],totals:{expenses_this_month:cur.total,prev_month_same_point:same.total,prev_month_full:full[0].total,income:bs.income,savings:bs.savings,left_this_month:bs.balance},categories:cats,highlights:hi}}
+const nis=n=>`${Math.round(n).toLocaleString('he-IL')} ₪`;
 
 // ---------- כלים ----------
 const S_=(type,description,extra={})=>({type,description,...extra});
 const TOOLS=[
  {name:'get_state',description:'קריאת מצב עדכני: משימות לו"ז ומשימות לכל ימי השבוע, וסיכום התקציב של החודש הנוכחי.',},
- {name:'add_task',description:'הוספת משימה ללו"ז בשעה מסוימת (משבצות של 15 דקות, 08:00–02:00). רק בשבוע הנוכחי.',parameters:{type:'object',properties:{date:S_('string','YYYY-MM-DD של היום בשבוע הנוכחי'),start:S_('string','שעת התחלה HH:MM (00:00–02:00 = אחרי חצות של אותו יום ביומן)'),duration_min:S_('integer','משך בדקות, כפולה של 15. ברירת מחדל 60'),title:S_('string','כותרת המשימה'),category:S_('string','קטגוריית לו"ז',{enum:Object.keys(PCATS)}),note:S_('string','הערה')},required:['date','start','title']}},
- {name:'edit_task',description:'עריכת משימה קיימת בלו"ז לפי id. שדות שלא נשלחו לא משתנים.',parameters:{type:'object',properties:{date:S_('string','היום שבו המשימה נמצאת כעת YYYY-MM-DD'),task_id:S_('number','id של המשימה'),new_date:S_('string','יום חדש YYYY-MM-DD'),start:S_('string','שעה חדשה HH:MM'),duration_min:S_('integer','משך חדש'),title:S_('string','כותרת חדשה'),category:S_('string','קטגוריה',{enum:Object.keys(PCATS)}),note:S_('string','הערה')},required:['date','task_id']}},
- {name:'delete_task',description:'מחיקת משימה מהלו"ז. רק אחרי שהמשתמש אישר במפורש.',parameters:{type:'object',properties:{date:S_('string','YYYY-MM-DD'),task_id:S_('number','id')},required:['date','task_id']}},
+ {name:'add_task',description:'הוספת משימה ללו"ז בשעה מסוימת (משבצות של 15 דקות, 08:00–02:00). רק בשבוע הנוכחי.',parameters:{type:'object',properties:{date:S_('string','YYYY-MM-DD של היום בשבוע הנוכחי'),start:S_('string','שעת התחלה HH:MM (00:00–02:00 = אחרי חצות של אותו יום ביומן)'),duration_min:S_('integer','משך בדקות, כפולה של 15. ברירת מחדל 60'),title:S_('string','כותרת המשימה'),category:S_('string','קטגוריית לו"ז',{enum:Object.keys(PCATS)}),note:S_('string','הערה'),repeat_days:S_('array','אופציונלי: משימה שחוזרת השבוע – תאריכים נוספים YYYY-MM-DD בשבוע הנוכחי שבהם להוסיף את אותה משימה באותה שעה (למשל "כל יום השבוע חוץ משישי"). ימים שהמשבצת בהם תפוסה מדולגים.',{items:{type:'string'}})},required:['date','start','title']}},
+ {name:'edit_task',description:'עריכת משימה קיימת בלו"ז לפי id. שדות שלא נשלחו לא משתנים.',parameters:{type:'object',properties:{date:S_('string','היום שבו המשימה נמצאת כעת YYYY-MM-DD'),task_id:S_('number','id של המשימה'),new_date:S_('string','יום חדש YYYY-MM-DD'),start:S_('string','שעה חדשה HH:MM'),duration_min:S_('integer','משך חדש'),title:S_('string','כותרת חדשה'),category:S_('string','קטגוריה',{enum:Object.keys(PCATS)}),note:S_('string','הערה'),all_week:S_('boolean','true = להחיל את השינוי (כותרת/שעה/משך/קטגוריה/הערה) על כל המופעים של משימה חוזרת השבוע. בלי new_date.')},required:['date','task_id']}},
+ {name:'delete_task',description:'מחיקת משימה מהלו"ז. רק אחרי שהמשתמש אישר במפורש.',parameters:{type:'object',properties:{date:S_('string','YYYY-MM-DD'),task_id:S_('number','id'),all_week:S_('boolean','true = למחוק את כל המופעים של משימה חוזרת השבוע')},required:['date','task_id']}},
  {name:'set_task_done',description:'סימון משימת לו"ז כבוצעה או כלא בוצעה.',parameters:{type:'object',properties:{date:S_('string','YYYY-MM-DD'),task_id:S_('number','id'),done:S_('boolean','true = בוצע')},required:['date','task_id','done']}},
  {name:'add_todo',description:'הוספת משימה בלי שעה לרשימת המשימות של יום.',parameters:{type:'object',properties:{date:S_('string','YYYY-MM-DD, ברירת מחדל היום'),text:S_('string','המשימה'),category:S_('string','קטגוריה',{enum:Object.keys(PCATS)})},required:['text']}},
  {name:'set_todo_done',description:'סימון משימה (בלי שעה) כבוצעה/לא בוצעה לפי האינדקס שלה ברשימה של אותו יום.',parameters:{type:'object',properties:{date:S_('string','YYYY-MM-DD'),index:S_('integer','index מהמצב'),done:S_('boolean','true = בוצע')},required:['date','index','done']}},
@@ -82,7 +100,10 @@ const TOOLS=[
  {name:'delete_budget_item',description:'מחיקת תנועה מהחודש הנוכחי (entries) או הסרת קבועה מהחודש הנוכחי ואילך (fixed). רק אחרי אישור.',parameters:{type:'object',properties:{id:S_('string','id'),list:S_('string','',{enum:['entries','fixed']})},required:['id','list']}},
  {name:'add_investment',description:'הוספת השקעה/חיסכון לאחזקות.',parameters:{type:'object',properties:{name:S_('string','שם'),type:S_('string','סוג',{enum:HOLD}),invested:S_('number','סכום שהושקע'),value:S_('number','שווי נוכחי (אם לא ידוע – שווה לסכום שהושקע)')},required:['name','type','invested']}},
  {name:'update_investment',description:'עדכון אחזקה קיימת לפי id.',parameters:{type:'object',properties:{id:S_('string','id'),invested:S_('number','סכום שהושקע'),value:S_('number','שווי נוכחי'),name:S_('string','שם')},required:['id']}},
- {name:'set_category_target',description:'קביעת יעד (תקרת תקציב) חודשי לקטגוריית הוצאה בחודש הנוכחי. 0 מוחק את היעד.',parameters:{type:'object',properties:{category:S_('string','',{enum:['food','car','home','bills','fun','shop','health','other']}),amount:S_('number','סכום היעד')},required:['category','amount']}}
+ {name:'set_category_target',description:'קביעת יעד (תקרת תקציב) חודשי לקטגוריית הוצאה בחודש הנוכחי. 0 מוחק את היעד.',parameters:{type:'object',properties:{category:S_('string','',{enum:['food','car','home','bills','fun','shop','health','other']}),amount:S_('number','סכום היעד')},required:['category','amount']}},
+ {name:'get_budget_insights',description:'ניתוח תקציב: לכל קטגוריה – כמה הוצא החודש, לעומת אותה תקופה בחודש שעבר, החודש הקודם המלא וממוצע 3 חודשים קודמים, תחזית לסוף החודש, יעד ואחוז ניצול, וסימון חריגות. השתמש כשמבקשים "איך אני עם התקציב", "על מה אני מוציא הכי הרבה", "איפה לחסוך".'},
+ {name:'plan_day',description:'תכנון יום: מקבל רשימת דברים (בלי שעות, או חלקם עם שעה מועדפת) ומשבץ אותם במשבצות פנויות ביום שנבחר – מכבד משימות קיימות, רשת של 15 דק׳, 08:00–02:00, בשבת עד 23:45, והיום – רק מעכשיו והלאה. ברירת מחדל: משבץ ושומר; dry_run=true רק מציע בלי לשמור.',parameters:{type:'object',properties:{date:S_('string','YYYY-MM-DD בשבוע הנוכחי'),items:S_('array','הדברים לשבץ, לפי סדר העדיפות',{items:{type:'object',properties:{title:S_('string','כותרת'),duration_min:S_('integer','משך משוער בדקות (כפולה של 15). אם לא נאמר – הערך בעצמך באופן סביר'),category:S_('string','קטגוריה',{enum:Object.keys(PCATS)}),start:S_('string','שעה מועדפת HH:MM אם המשתמש ביקש')},required:['title']}}),start_after:S_('string','לא לפני השעה HH:MM'),end_before:S_('string','לסיים עד HH:MM'),gap_min:S_('integer','הפסקה בדקות בין משימות (ברירת מחדל 0)'),dry_run:S_('boolean','true = רק להציע, לא לשמור')},required:['date','items']}}
+
 ];
 const fail=e=>({ok:false,error:e});
 const num=x=>{const n=Number(x);return Number.isFinite(n)?n:NaN};
@@ -92,13 +113,16 @@ const EXEC={
  add_task(a){const g=getDay(a.date);if(g.err)return fail(g.err);if(!String(a.title||'').trim())return fail('חסרה כותרת – שאל את המשתמש');const t=parseTime(a.start,g.d.getDay()===6);if(t.err)return fail(t.err);
   const all=lp(),k=dkey(g.d),o={id:Date.now(),title:String(a.title).trim(),start:t.v,dur:durOk(a.duration_min),note:a.note||'',cat:PCATS[a.category]?a.category:'other',done:false,notified:false};
   if(g.d.getDay()===6&&o.start+o.dur>24*60)o.dur=Math.max(15,24*60-o.start);
-  all[k]=(all[k]||[]).concat(o).sort((x,y)=>x.start-y.start);sp(all);refreshPlanner();return{ok:true,task:{id:o.id,date:isoOf(g.d),start:fmtM(o.start),duration_min:o.dur,title:o.title},rounded_to_15:!!t.rounded}},
+  let rp=null;if(Array.isArray(a.repeat_days)&&a.repeat_days.length){o.rid='r'+o.id;rp=repeatOn(all,o,a.repeat_days,k)}
+  all[k]=(all[k]||[]).concat(o).sort((x,y)=>x.start-y.start);sp(all);refreshPlanner();return{ok:true,task:{id:o.id,date:isoOf(g.d),start:fmtM(o.start),duration_min:o.dur,title:o.title},rounded_to_15:!!t.rounded,...(rp?{repeated_on:rp.added,skipped:rp.skipped}:{})}},
  edit_task(a){const g=getDay(a.date);if(g.err)return fail(g.err);const all=lp(),k=dkey(g.d),arr=all[k]||[],t=arr.find(x=>String(x.id)===String(a.task_id));if(!t)return fail('לא נמצאה משימה עם id כזה ביום הזה');
   let nd=g.d;if(a.new_date){const g2=getDay(a.new_date);if(g2.err)return fail(g2.err);nd=g2.d}
   if(a.start!=null||nd!==g.d){const tt=parseTime(a.start!=null?a.start:fmtM(t.start),nd.getDay()===6);if(tt.err)return fail(tt.err);if(tt.v!==t.start){t.start=tt.v;t.notified=false}}
   if(a.duration_min!=null)t.dur=durOk(a.duration_min);if(a.title)t.title=String(a.title).trim();if(PCATS[a.category])t.cat=a.category;if(a.note!=null)t.note=a.note;
-  all[k]=arr.filter(x=>x!==t);const nk=dkey(nd);all[nk]=(all[nk]||[]).concat(t).sort((x,y)=>x.start-y.start);sp(all);refreshPlanner();return{ok:true,task:{id:t.id,date:isoOf(nd),start:fmtM(t.start),duration_min:t.dur,title:t.title}}},
- delete_task(a){const g=getDay(a.date);if(g.err)return fail(g.err);const all=lp(),k=dkey(g.d),arr=all[k]||[];const t=arr.find(x=>String(x.id)===String(a.task_id));if(!t)return fail('לא נמצאה משימה');all[k]=arr.filter(x=>x!==t);sp(all);refreshPlanner();return{ok:true,deleted:t.title}},
+  all[k]=arr.filter(x=>x!==t);const nk=dkey(nd);all[nk]=(all[nk]||[]).concat(t).sort((x,y)=>x.start-y.start);let also=[];
+  if(a.all_week&&t.rid&&!a.new_date)weekDays().forEach(d=>{const dk2=dkey(d);if(dk2===nk)return;const sat=d.getDay()===6;(all[dk2]||[]).forEach(x=>{if(x.rid!==t.rid)return;if(a.title)x.title=t.title;if(PCATS[a.category])x.cat=t.cat;if(a.note!=null)x.note=t.note;if(a.start!=null&&!(sat&&t.start>=24*60)){if(x.start!==t.start)x.notified=false;x.start=t.start}if(a.duration_min!=null)x.dur=t.dur;if(sat&&x.start+x.dur>24*60)x.dur=Math.max(15,24*60-x.start);also.push(DN[d.getDay()])});all[dk2]&&all[dk2].sort((x,y)=>x.start-y.start)});
+  sp(all);refreshPlanner();return{ok:true,task:{id:t.id,date:isoOf(nd),start:fmtM(t.start),duration_min:t.dur,title:t.title},...(also.length?{also_updated:also}:{})}},
+ delete_task(a){const g=getDay(a.date);if(g.err)return fail(g.err);const all=lp(),k=dkey(g.d),arr=all[k]||[];const t=arr.find(x=>String(x.id)===String(a.task_id));if(!t)return fail('לא נמצאה משימה');all[k]=arr.filter(x=>x!==t);let n=1;if(a.all_week&&t.rid)weekDays().forEach(d=>{const dk2=dkey(d),b=all[dk2]||[],c=b.filter(x=>x.rid!==t.rid);n+=b.length-c.length;if(all[dk2])all[dk2]=c});sp(all);refreshPlanner();return{ok:true,deleted:t.title,count:n}},
  set_task_done(a){const g=getDay(a.date);if(g.err)return fail(g.err);const all=lp(),t=(all[dkey(g.d)]||[]).find(x=>String(x.id)===String(a.task_id));if(!t)return fail('לא נמצאה משימה');t.done=!!a.done;sp(all);refreshPlanner();resolveRem('task:'+dkey(g.d)+':'+t.id);return{ok:true,title:t.title,done:t.done}},
  add_todo(a){const g=getDay(a.date||isoOf(plannerDay()));if(g.err)return fail(g.err);const text=String(a.text||'').trim();if(!text)return fail('חסר תוכן למשימה');const o=ltd(),k=dkey(g.d);(o[k]=o[k]||[]).push({text,done:false,cat:PCATS[a.category]?a.category:undefined});std(o);refreshPlanner();return{ok:true,date:isoOf(g.d),index:o[k].length-1,text}},
  set_todo_done(a){const g=getDay(a.date||isoOf(plannerDay()));if(g.err)return fail(g.err);const o=ltd(),t=(o[dkey(g.d)]||[])[a.index];if(!t)return fail('לא נמצאה משימה באינדקס הזה');t.done=!!a.done;std(o);refreshPlanner();return{ok:true,text:t.text,done:t.done}},
@@ -114,6 +138,23 @@ const EXEC={
   const e=d.entries.find(x=>x.id===a.id);if(!e)return fail('לא נמצאה תנועה');if(String(e.date).slice(0,7)!==m)return fail('חודשים קודמים הם לקריאה בלבד – אי אפשר לשנות');d.entries=d.entries.filter(x=>x!==e);wb(d);refreshBudget();return{ok:true,removed:e.description}},
  add_investment(a){const inv=num(a.invested),val=a.value==null?inv:num(a.value);if(!String(a.name||'').trim())return fail('חסר שם');if(!(inv>=0)||!(val>=0))return fail('חסר סכום');const o={name:String(a.name).trim(),type:HOLD.includes(a.type)?a.type:'אחר',invested:inv,value:val,id:uid()};const d=rb();d.holdings.push(o);wb(d);refreshBudget();return{ok:true,investment:o}},
  update_investment(a){const d=rb(),h=d.holdings.find(x=>x.id===a.id);if(!h)return fail('לא נמצאה אחזקה');if(a.invested!=null){if(!(num(a.invested)>=0))return fail('סכום לא תקין');h.invested=num(a.invested)}if(a.value!=null){if(!(num(a.value)>=0))return fail('שווי לא תקין');h.value=num(a.value)}if(a.name)h.name=String(a.name).trim();wb(d);refreshBudget();return{ok:true,investment:h}},
+ get_budget_insights:()=>({ok:true,...budgetInsights()}),
+ plan_day(a){const g=getDay(a.date);if(g.err)return fail(g.err);const items=(Array.isArray(a.items)?a.items:[]).filter(x=>x&&String(x.title||'').trim());if(!items.length)return fail('חסרה רשימה של דברים לשבץ – שאל את המשתמש');
+  const sat=g.d.getDay()===6,k=dkey(g.d),all=lp(),arr=all[k]||[],busy=arr.map(t=>[t.start,t.start+ +t.dur]),gap=Math.max(0,Math.round((+a.gap_min||0)/15)*15);
+  let from=8*60,to=sat?24*60:26*60;if(a.start_after){const t=parseTime(a.start_after,sat);if(t.err)return fail(t.err);from=Math.max(from,t.v)}
+  if(a.end_before){const m=String(a.end_before).match(/^(\d{1,2})(?::(\d{2}))?$/);if(m){let v=+m[1]*60+ +(m[2]||0);if(+m[1]<8)v+=24*60;to=Math.min(to,Math.floor(v/15)*15)}}
+  if(k===dkey(plannerDay())){const nm=(Date.now()-g.d.getTime())/60000;from=Math.max(from,Math.ceil(nm/15)*15)}
+  const free=(s,e)=>s>=from&&e<=to&&busy.every(([x,y])=>e+gap<=x||s>=y+gap);const placed=[],missed=[];let id=Date.now();
+  const order=items.map((x,i)=>({x,i})).sort((p,q)=>(q.x.start?1:0)-(p.x.start?1:0));
+  for(const {x} of order){const dur=durOk(x.duration_min);let at=null,note='';
+   if(x.start){const t=parseTime(x.start,sat);if(!t.err&&free(t.v,t.v+dur))at=t.v;else note='השעה שביקשת תפוסה או לא אפשרית – שובץ בזמן הפנוי הקרוב'}
+   if(at==null)for(let s2=Math.ceil(from/15)*15;s2+dur<=to;s2+=15)if(free(s2,s2+dur)){at=s2;break}
+   if(at==null){missed.push({title:x.title,reason:'אין מספיק זמן פנוי ביום הזה'});continue}
+   busy.push([at,at+dur]);placed.push({id:id++,title:String(x.title).trim(),start:at,dur,note:'',cat:PCATS[x.category]?x.category:'other',done:false,notified:false,_n:note})}
+  placed.sort((p,q)=>p.start-q.start);const out=placed.map(t=>({title:t.title,start:fmtM(t.start),end:fmtM(t.start+t.dur),duration_min:t.dur,...(t._n?{note:t._n}:{})}));
+  if(!a.dry_run&&placed.length){all[k]=arr.concat(placed.map(({_n,...t})=>t)).sort((x,y)=>x.start-y.start);sp(all);refreshPlanner()}
+  return{ok:true,date:isoOf(g.d),saved:!a.dry_run&&placed.length>0,placed:out,not_placed:missed,existing:arr.map(t=>({title:t.title,start:fmtM(t.start),end:fmtM(t.start+ +t.dur)}))}},
+
  set_category_target(a){const C=B()?.categories||{},amount=num(a.amount);if(!C[a.category])return fail('קטגוריה לא תקינה');if(!(amount>=0))return fail('סכום לא תקין');const d=rb(),m=ymNow();(d.limits[m]=d.limits[m]||{})[a.category]=amount;wb(d);refreshBudget();return{ok:true,month:m,category:C[a.category][0],target:amount}}
 };
 function runTool(name,args){try{const f=EXEC[name];return f?f(args||{}):fail('כלי לא מוכר')}catch(e){return fail('שגיאה: '+e.message)}}
@@ -136,6 +177,10 @@ function systemPrompt(){const now=new Date(),C=B()?.categories||{},S=B()?.SUGG||
 - אם המשתמש מבקש כמה דברים בבת אחת – בצע את כולם.
 - אם כלי החזיר error – הסבר/שאל לפי ההודעה.
 - כשמבקשים מצב/סיכום – השתמש בנתונים למטה (או get_state) וסכם יפה.
+- משימה שחוזרת השבוע ("כל יום השבוע ב-18:00 חוץ משישי", "ראשון שלישי וחמישי"): add_task על היום הראשון + repeat_days עם שאר התאריכים מהרשימה. רק בשבוע הנוכחי – זה לא עובר לשבוע הבא. אחרי זה ציין באילו ימים נוסף ועל אילו דילגת ולמה. בעריכה/מחיקה של משימה עם repeats_this_week – שאל "רק היום או כל השבוע?" ואז all_week בהתאם.
+- תכנון יום: כשהמשתמש מונה כמה דברים ליום מסוים בלי שעות ("מחר יש לי: כביסה, סופר, להתקשר לאמא") – קרא ל-plan_day עם כל הדברים (הערך משך סביר לכל אחד אם לא נאמר; אם לא ברור לאיזה יום – שאל). אחרי השיבוץ אשר בקצרה מה שובץ ומתי (רשימה עם שעות), מה לא נכנס ולמה, ושאפשר להזיז. אם ביקש "תציע קודם" – dry_run=true ואז שמור אחרי אישור.
+- "איך אני עם התקציב" / "על מה אני מוציא הכי הרבה" / "איפה לחסוך" – קרא ל-get_budget_insights ותן 2–4 תובנות קצרות וקונקרטיות עם מספרים (מה עלה/ירד לעומת אותה תקופה בחודש שעבר, מה קרוב ליעד, כמה נשאר), ועצה אחת מעשית.
+- צילום קבלה: כשמגיעה תמונה – חלץ את הסכום הכולל לתשלום (לא מע"מ ולא סכום ביניים), את שם העסק וקטגוריה מתאימה. אם הכל ברור – רשום מיד עם add_expense (תיאור: שם העסק עם אימוג׳י מתאים, או ההצעה המתאימה מהרשימה) ואשר מה נרשם. אם הסכום לא קריא, יש כמה סכומים, או שהקטגוריה לא ברורה – שאל לאישור לפני הרישום. אם זו לא קבלה – אמור זאת בעדינות.
 קטגוריות לו"ז: ${Object.entries(PCATS).map(([k,v])=>k+'='+v).join(', ')}.
 קטגוריות הוצאה והצעות תיאור:
 ${Object.keys(C).map(k=>`${k}=${C[k][0]}: ${(S[k]||[]).join(' | ')}`).join('\n')}
@@ -144,16 +189,18 @@ ${Object.keys(C).map(k=>`${k}=${C[k][0]}: ${(S[k]||[]).join(' | ')}`).join('\n')
 • כותרת עליונה: "📒 היומן של נתנאל", לידה 🌙/☀️ למצב כהה/בהיר (נשמר תמיד). "🔔 הפעל התראות" – מאשר התראות; בלי זה אין התראות בטלפון. שורת ימים ראשון–שבת של השבוע הנוכחי (היום מסומן במסגרת צהובה) – לחיצה על יום עוברת אליו. 4 לשוניות: לו"ז | משימות | סיכום | תקציב.
 • לו"ז: משבצות 15 דק׳ מ-08:00 עד 02:00 (בשבת עד 23:45); עד 02:30 בלילה עדיין נחשב היום הקודם. הוספה: לוחצים על משבצת ריקה ← "משימה חדשה": כותרת, שעת התחלה, משך (15 דק׳ עד 8 שע׳), קטגוריה (עבודה/אישי/קניות/אחר, לכל אחת צבע – מקרא למעלה), הערה ← "שמור". עריכה: לוחצים על המשימה ← משנים ← "שמור"; מחיקה: "מחק". ☐ בפינת המשימה = סימון בוצע (✅ וקו חוצה). 10 דקות לפני משימה יש צפצוף, רטט והתראה ⏰.
 • משימות (בלי שעה): כותבים ב"מה צריך לעשות היום?", בוחרים קטגוריה (או "ללא") ← "הוסף" או Enter. ☐ או לחיצה על הטקסט = בוצע; ✏️ עריכה; 🗑️ מחיקה. "העבר משימות שלא הושלמו למחר ←" מעביר את הפתוחות ליום הבא (לא בשבת). כל יום עם רשימה משלו.
-• סיכום: ליום הנבחר – כמה בוצעו בלו"ז ובמשימות, זמן שבוצע/מתוכנן, התקדמות לפי קטגוריה, "✅ מה הושלם" ו"⏳ לא הושלם".
+• משימה שחוזרת השבוע: בטופס "משימה חדשה" מסמנים "🔁 חוזר השבוע" ובוחרים ימים (א׳–ש׳; ברירת מחדל: מהיום שנבחר ועד שבת) ← "שמור". נוצרת אותה משימה באותה שעה בכל יום שנבחר בשבוע הנוכחי בלבד; יום שהמשבצת בו תפוסה מדולג (מופיעה הודעה). בעריכה או מחיקה של משימה כזו נשאל "רק היום" / "כל השבוע". זה לא עובר לשבוע הבא – מתאפס עם כל היומן.
+• סיכום: ליום הנבחר – כמה בוצעו בלו"ז ובמשימות, זמן שבוצע/מתוכנן, התקדמות לפי קטגוריה, "✅ מה הושלם" ו"⏳ לא הושלם". כשיש סיכום שבועי פתוח מופיע שם גם "📊 סיכום השבוע" (נעלם 24 שעות אחרי שנפתח).
+• סיכום שבועי: בשבת ב-22:00 נוצר "📊 סיכום השבוע שלך" (לו"ז ומשימות שבוצעו, זמן לפי קטגוריה, היום הכי פרודוקטיבי, הוצאות השבוע ומתחילת החודש). נשלחת התראה אחת לטלפון "📊 סיכום השבוע שלך מוכן" (למשל "השלמת 12 מתוך 15 משימות"; לחיצה פותחת את לשונית "סיכום"), ובפתיחה הבאה של היומן מופיע פעם אחת כרטיס קטן – סוגרים בלחיצה אחת. הסיכום עובד כמו "צפייה חד-פעמית": הוא נשמר (גם אחרי האיפוס של 00:00) עד שפותחים אותו – בכרטיס, בלשונית "סיכום" או מההתראה – ונעלם 24 שעות אחרי הפתיחה הראשונה. אם לא פותחים אותו בכלל – הוא נמחק לבד ביום שני ב-04:00 (30 שעות אחרי שבת 22:00). סיכום של שבוע חדש מחליף ישן; אין היסטוריה. ההתראה נשלחת רק אם התראות מופעלות והיומן פתוח (גם ברקע) בשבת בין 22:00 ל-00:00, אחרת רק הכרטיס בפתיחה הבאה.
 • איפוס שבועי: כל מוצאי שבת ב-00:00 נמחקים אוטומטית הלו"ז, המשימות, השיחה עם העוזר והתזכורות – לא צריך למחוק את השיחה ידנית. נשמרים: כל התקציב וההשקעות, מצב כהה וההגדרות. אי אפשר לתכנן שבוע הבא מראש.
 • תקציב: למעלה "→ חודש קודם" / "חודש הבא ←". מדורים: סקירה | הכנסות | הוצאות | קבועות | השקעות. הכפתור הגדול "＋" משתנה לפי המדור ("תנועה חדשה" / "הכנסה חדשה" / "הוצאה / הכנסה קבועה" / "השקעה או חיסכון").
  – הוצאה: מדור הוצאות ← "＋ תנועה חדשה" ← בוחרים "קטגוריית הוצאה" ← לוחצים על "תיאור" ונפתח "בחר תיאור" עם הצעות + אימוג׳י לפי הקטגוריה (או כותבים חופשי ← "אישור") ← "סכום ₪" ← "שמור". תנועה נרשמת להיום.
  – הכנסה: מדור הכנסות ← "＋ הכנסה חדשה" ← סוג הכנסה (משכורת/עצמאי/קצבה/אחר) + סכום. הפקדה לחיסכון: סוג תנועה "הפקדה לחיסכון", או במדור השקעות "＋ הפקדה לחיסכון".
  – קבועות: מדור קבועות ← "＋ הוצאה / הכנסה קבועה" ← סכום ו"יום בחודש" – נרשמת אוטומטית בכל חודש מעכשיו והלאה. בכל קבועה: "עריכה מהחודש הנוכחי", "עצירה מהחודש הנוכחי", "הסרה מהחודש הנוכחי" – חודשים קודמים לא משתנים.
- – סקירה: הכנסות, הוצאות כולל קבועות, הפקדות לחיסכון, "נשאר לך". לכל קטגוריה שדה "יעד ₪" לחודש (נשמר לכל חודש בנפרד): ב-80% "⚠️ קרוב לתקציב", ב-100% "⚠️ הגעת לתקציב" (+התראה).
+ – סקירה: הכנסות, הוצאות כולל קבועות, הפקדות לחיסכון, "נשאר לך". מתחת: "📊 לאן הלך הכסף" – גרף עוגה לפי קטגוריות עם סה"כ, אחוז מכל קטגוריה והשוואה (▲ עלייה אדומה / ▼ ירידה ירוקה) לאותה תקופה בחודש שעבר; בחודש קודם – לחודש שלפניו. לכל קטגוריה שדה "יעד ₪" לחודש (נשמר לכל חודש בנפרד): ב-80% "⚠️ קרוב לתקציב", ב-100% "⚠️ הגעת לתקציב" (+התראה).
  – השקעות: אחזקות (קרן השתלמות/מניות/פיקדון/קריפטו/חיסכון/אחר) עם הושקע, שווי נוכחי ורווח/הפסד; "עריכה"/"מחיקה". לא מתאפסות לפי חודש וניתנות לעריכה תמיד.
  – חודשים קודמים: 🔒 צפייה בלבד + טבלת "תוצאות החודש". הנתונים נשמרים רק בטלפון, בלי חיבור לבנק.
-• העוזר (אתה): כפתור 🤖 בפינה (מספר עליו = הודעות שלא נקראו) פותח את "🤖 העוזר שלי"; ✕ סוגר. כותבים ושולחים ב-➤, או 🎤 לדיבור בעברית (⏹ לעצירה). ⚙️ הגדרות: תיבת "תזכורות: לשאול אותי אם ביצעתי משימות", "שמור", "🧹 נקה את השיחה" (רק אם רוצים למחוק עכשיו; השיחה גם נמחקת אוטומטית כל מוצאי שבת ב-00:00, בלי צורך למחוק ידנית). תזכורות: כשמשימת לו"ז מסתיימת אני שואל עם "✅ בוצע" / "עוד לא" (עוד לא = שואל שוב בעוד שעה, עד 3 פעמים); ב-13:00 וב-20:30 שואל על משימות פתוחות.
+• העוזר (אתה): כפתור 🤖 בפינה (מספר עליו = הודעות שלא נקראו) פותח את "🤖 העוזר שלי"; ✕ סוגר. כותבים ושולחים ב-➤, או 🎤 לדיבור בעברית (⏹ לעצירה). 📷 = צילום קבלה: מצלמים ואני מזהה סכום, עסק וקטגוריה ורושם את ההוצאה (שואל אם משהו לא ברור). ☀️ בוקר טוב יומי: בפתיחה הראשונה של היום אחרי 06:00 אני כותב סיכום קצר – מה בלו"ז היום, משימות פתוחות, כמה נשאר בתקציב החודש, והתראה אם קטגוריה גבוהה מהרגיל; אפשר לכבות בהגדרות. אפשר לבקש ממני "איך אני עם התקציב" לניתוח מלא, ו"תתכנן לי את מחר: …" כדי שאשבץ דברים במשבצות הפנויות. ⚙️ הגדרות: תיבת "תזכורות: לשאול אותי אם ביצעתי משימות", תיבת "☀️ בוקר טוב יומי", "שמור", "🧹 נקה את השיחה" (רק אם רוצים למחוק עכשיו; השיחה גם נמחקת אוטומטית כל מוצאי שבת ב-00:00, בלי צורך למחוק ידנית). תזכורות: כשמשימת לו"ז מסתיימת אני שואל עם "✅ בוצע" / "עוד לא" (עוד לא = שואל שוב בעוד שעה, עד 3 פעמים); ב-13:00 וב-20:30 שואל על משימות פתוחות.
 • התקנה כאפליקציה: אייפון – Safari ← שיתוף ← "הוסף למסך הבית"; אנדרואיד – Chrome ← ⋮ ← "התקן אפליקציה"/"הוסף למסך הבית". עובד גם בלי אינטרנט (חוץ מהעוזר).
 • דברים שרק המשתמש עושה (הדרך אותו): מצב כהה, הפעלת התראות, העברת משימות למחר, עריכת טקסט של משימה בלי שעה, עריכת הכנסה/הוצאה/קבועה קיימת (לוחצים "עריכה" ליד הפריט), מעבר בין חודשים, הגדרות העוזר.
 ${pend.length?'תזכורות פתוחות ששאלת עליהן (אם המשתמש עונה "עשיתי"/"בוצע" – סמן בכלי המתאים): '+pend.join(', '):''}
@@ -192,17 +239,18 @@ pane.innerHTML=`<div class="as-head"><button type="button" class="as-x" aria-lab
 <button type="button" class="as-delkey" hidden>🗑️ הסר קוד</button>
 </div>
 <label class="as-chk"><input type="checkbox" class="as-rem"> תזכורות: לשאול אותי אם ביצעתי משימות</label>
+<label class="as-chk"><input type="checkbox" class="as-brief"> ☀️ בוקר טוב יומי: סיכום קצר של היום בכל בוקר</label>
 <div class="as-row"><button type="button" class="as-save">שמור</button></div>
 <button type="button" class="as-clear">🧹 נקה את השיחה</button>
 <p class="as-small">🔒 השיחה מתאפסת כל מוצאי שבת ב-00:00 ביחד עם היומן. נתוני התקציב לא נמחקים.</p></div></div>
 <div class="as-typing" hidden>העוזר חושב…</div>
-<form class="as-in"><button type="button" class="as-mic" aria-label="הקלטה">🎤</button><textarea rows="1" placeholder="כתוב או הקלט מה לעשות…" aria-label="הודעה"></textarea><button type="submit" class="as-send" aria-label="שלח">➤</button></form>`;
+<form class="as-in"><button type="button" class="as-mic" aria-label="הקלטה">🎤</button><button type="button" class="as-cam" aria-label="צלם קבלה" title="צלם קבלה">📷</button><input type="file" class="as-file" accept="image/*" capture="environment" hidden><textarea rows="1" placeholder="כתוב או הקלט מה לעשות…" aria-label="הודעה"></textarea><button type="submit" class="as-send" aria-label="שלח">➤</button></form>`;
 document.body.append(pane);
 const msgsEl=pane.querySelector('.as-msgs'),setEl=pane.querySelector('.as-set'),ta=pane.querySelector('textarea'),micB=pane.querySelector('.as-mic'),typing=pane.querySelector('.as-typing');
 const md=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
 let unread=+(localStorage.getItem('assistantUnread')||0);
 function badge(){const b=Q('#as-badge');b.hidden=!unread;b.textContent=unread>9?'9+':unread}
-function draw(){if(pane.hidden)return;const welcome=!chat.msgs.length?`<div class="as-m bot">שלום נתנאל! 👋 אני העוזר שלך ביומן.<br>אפשר לכתוב או להקליט לי, למשל:<br>• "שילמתי 200 שקל על דלק"<br>• "תוסיף מחר בעשר פגישה עם רואה חשבון"<br>• "קיבלתי משכורת 9000"<br>• "מה יש לי היום?"</div>`:'';
+function draw(){if(pane.hidden)return;const welcome=!chat.msgs.length?`<div class="as-m bot">שלום נתנאל! 👋 אני העוזר שלך ביומן.<br>אפשר לכתוב או להקליט לי, למשל:<br>• "שילמתי 200 שקל על דלק"<br>• "תוסיף מחר בעשר פגישה עם רואה חשבון"<br>• "קיבלתי משכורת 9000"<br>• "מה יש לי היום?"<br>• "תתכנן לי את מחר: כביסה, סופר, להתקשר לאמא"<br>• "איך אני עם התקציב?"<br>• 📷 צלם קבלה ואני ארשום את ההוצאה</div>`:'';
  msgsEl.innerHTML=welcome+chat.msgs.map(m=>`<div class="as-m ${m.role}" data-id="${m.id}">${md(m.text)}${m.btns?`<div class="as-btns">${m.btns.map((b,i)=>`<button type="button" data-i="${i}" ${m.answered?'disabled':''} class="${b.a.t==='later'?'':'ok'}">${esc(b.l)}</button>`).join('')}</div>`:''}</div>`).join('');
  msgsEl.scrollTop=msgsEl.scrollHeight}
 function openPane(){pane.hidden=false;fab.hidden=true;unread=0;localStorage.setItem('assistantUnread',0);badge();setEl.hidden=true;msgsEl.hidden=false;draw();setTimeout(()=>ta.focus(),50)}
@@ -219,8 +267,8 @@ function loadSet(){const k=getOwner();syncOwnerUI();const keyEl=pane.querySelect
  if(st){st.hidden=!k;st.innerHTML=k?'✅ קוד אישי שמור':'';st.className='as-kstat'+(k?' yes':'')}
  if(lab)lab.textContent=k?'להחלפת הקוד – הדבק קוד חדש (אפשר להשאיר ריק)':'קוד אישי';
  if(del)del.hidden=!k;
- pane.querySelector('.as-rem').checked=localStorage.getItem(LS.remOn)!=='off'}
-pane.querySelector('.as-save').onclick=()=>{const box=pane.querySelector('.as-owner');const k=(!box.hidden&&pane.querySelector('.as-key'))?pane.querySelector('.as-key').value.trim():'';if(k){localStorage.setItem(LS.owner,k);localStorage.removeItem(LS.quota)}localStorage.setItem(LS.remOn,pane.querySelector('.as-rem').checked?'on':'off');setEl.hidden=true;msgsEl.hidden=false;draw()};
+ pane.querySelector('.as-rem').checked=localStorage.getItem(LS.remOn)!=='off';pane.querySelector('.as-brief').checked=localStorage.getItem(LS.brief)!=='off'}
+pane.querySelector('.as-save').onclick=()=>{const box=pane.querySelector('.as-owner');const k=(!box.hidden&&pane.querySelector('.as-key'))?pane.querySelector('.as-key').value.trim():'';if(k){localStorage.setItem(LS.owner,k);localStorage.removeItem(LS.quota)}localStorage.setItem(LS.remOn,pane.querySelector('.as-rem').checked?'on':'off');localStorage.setItem(LS.brief,pane.querySelector('.as-brief').checked?'on':'off');setEl.hidden=true;msgsEl.hidden=false;draw()};
 pane.querySelector('.as-delkey').onclick=()=>{if(confirm('להסיר את הקוד האישי מהטלפון?')){localStorage.removeItem(LS.owner);localStorage.removeItem(LS.quota);loadSet()}};
 {const h=pane.querySelector('.as-set-title');let n=0,t=0;h.addEventListener('click',()=>{const now=Date.now();if(now-t>2000)n=0;t=now;if(++n>=5){n=0;ownerReveal=true;syncOwnerUI();loadSet()}})}
 
@@ -231,9 +279,9 @@ pane.querySelector('form').onsubmit=e=>{e.preventDefault();const t=ta.value.trim
 msgsEl.addEventListener('click',e=>{const b=e.target.closest('.as-btns button');if(!b)return;const m=chat.msgs.find(x=>x.id===b.closest('.as-m').dataset.id);if(!m||m.answered)return;answerBtn(m,m.btns[+b.dataset.i])});
 
 let busy=false;
-async function send(text,turn){if(busy)return;push({role:'user',text});turn=turn||newTurn();
+async function send(text,turn,img){if(busy)return;push({role:'user',text:img?'📷 צילום קבלה'+(text?'\n'+text:''):text});turn=turn||newTurn();
  busy=true;typing.hidden=false;
- try{const api=trimApi(chat.api.concat({role:'user',parts:[{text}]}));let changed=[];
+ try{const parts=img?[{inlineData:{mimeType:'image/jpeg',data:img}},{text:RECEIPT+(text?'\nהמשתמש הוסיף: '+text:'')}]:[{text}];const api=trimApi(chat.api.concat({role:'user',parts}));let changed=[];
   for(let step=0;step<8;step++){let j;try{j=await gemini(api,{systemInstruction:{parts:[{text:systemPrompt()}]},tools:[{functionDeclarations:TOOLS}]},turn)}
    catch(e){if(e.code==='turn'&&step>0){api.push({role:'model',parts:[{text:'בוצע ✅'}]});push({role:'bot',text:'בוצע ✅'});break}throw e}
    const c=j?.candidates?.[0]?.content;if(!c||!c.parts){const why=j?.promptFeedback?.blockReason||j?.candidates?.[0]?.finishReason;throw new Error('לא התקבלה תשובה'+(why?' ('+why+')':''))}
@@ -242,9 +290,20 @@ async function send(text,turn){if(busy)return;push({role:'user',text});turn=turn
    const resp=calls.map(p=>{const res=runTool(p.functionCall.name,p.functionCall.args);if(res.ok&&p.functionCall.name!=='get_state')changed.push(p.functionCall.name);const fr={name:p.functionCall.name,response:res};if(p.functionCall.id)fr.id=p.functionCall.id;return{functionResponse:fr}});
    api.push({role:'user',parts:resp});
    if(step===7)push({role:'bot',text:'בוצע ✅'})}
-  chat.api=trimApi(api);saveChat()}
+  chat.api=trimApi(noImg(api));saveChat()}
  catch(e){push({role:'err',text:(e.code==='limit'?'':'⚠️ ')+(e.code==='turn'?'העוזר עמוס כרגע, נסה שוב עוד מעט':e.message)})}
  finally{busy=false;typing.hidden=true}}
+
+// ---------- צילום קבלה ----------
+const RECEIPT='זו תמונה של קבלה/חשבונית. חלץ את הסכום הכולל לתשלום, את שם העסק וקטגוריה מתאימה, ורשום את ההוצאה עם add_expense. אם הסכום או הקטגוריה לא ברורים – שאל אותי לאישור לפני שאתה רושם.';
+// התמונה נשלחת רק בתור הנוכחי; בהיסטוריה השמורה היא מוחלפת בטקסט כדי לא לנפח את הזיכרון ואת הבקשות הבאות
+const noImg=api=>api.map(c=>c.parts&&c.parts.some(p=>p.inlineData)?{...c,parts:c.parts.map(p=>p.inlineData?{text:'[צורפה תמונת קבלה – כבר טופלה]'}:p)}:c);
+async function shrinkImage(file,max=1280,q=.7){const url=URL.createObjectURL(file);try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('img'));i.src=url});
+ const w=img.naturalWidth,h=img.naturalHeight,s=Math.min(1,max/Math.max(w,h)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*s));c.height=Math.max(1,Math.round(h*s));const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);
+ return c.toDataURL('image/jpeg',q).split(',')[1]}finally{URL.revokeObjectURL(url)}}
+{const cam=pane.querySelector('.as-cam'),file=pane.querySelector('.as-file');cam.onclick=()=>{if(!busy){file.value='';file.click()}};
+ file.onchange=async()=>{const f=file.files&&file.files[0];if(!f)return;let b64;try{b64=await shrinkImage(f)}catch(e){push({role:'err',text:'⚠️ לא הצלחתי לפתוח את התמונה. נסה לצלם שוב.'});return}
+  const cap=ta.value.trim();ta.value='';ta.style.height='auto';send(cap,undefined,b64)}}
 
 // ---------- מיקרופון ----------
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let rec=null,mr=null,chunks=[],srBroken=false;
@@ -290,8 +349,20 @@ function checkReminders(){if(localStorage.getItem(LS.remOn)==='off')return;const
   const txt=`📝 יש לך ${open.length} משימות פתוחות להיום. סיימת משהו מהן?`;push({role:'bot',text:txt+'\n'+open.map(t=>'• '+t.text).join('\n'),btns:open.slice(0,8).map(t=>({l:'✅ '+t.text,a:{t:'todo',k:rk,day:k,idx:t.i,text:t.text}})).concat({l:'עוד לא',a:{t:'later',k:rk}})});ping(txt)}
  saveRem(o)}
 
+// ---------- בוקר טוב יומי (מקומי, בלי שרת) ----------
+function briefText(){const day=new Date();day.setHours(0,0,0,0);const k=dkey(day),tasks=(lp()[k]||[]).filter(t=>!t.done),todos=(ltd()[k]||[]).filter(t=>!t.done),d=rb(),m=ymNow(),hasBud=monthRows(d,m).length>0;
+ if(!tasks.length&&!todos.length&&!hasBud&&!(lp()[k]||[]).length)return null;
+ const hr=new Date().getHours(),L=[`${hr<12?'☀️ בוקר טוב':hr<17?'🌤️ צהריים טובים':'🌙 ערב טוב'}! הנה היום שלך (יום ${DN[day.getDay()]}):`];
+ L.push(tasks.length?`📅 בלו"ז היום (${tasks.length}):\n`+tasks.slice(0,8).map(t=>`• \u2066${fmtM(t.start)}\u2069 ${t.title}`).join('\n')+(tasks.length>8?`\n• ועוד ${tasks.length-8}…`:''):'📅 אין משימות בלו"ז להיום.');
+ if(todos.length)L.push(`📝 משימות פתוחות (${todos.length}):\n`+todos.slice(0,6).map(t=>'• '+t.text).join('\n')+(todos.length>6?`\n• ועוד ${todos.length-6}…`:''));
+ if(hasBud){const bs=budgetSummary();L.push(bs.balance>=0?`💰 נשאר לך החודש: ${nis(bs.balance)}`:`💰 שים לב: החודש הוצאת ${nis(-bs.balance)} יותר ממה שנכנס`);
+  try{const hi=budgetInsights().highlights;if(hi.length)L.push('💡 '+hi[0])}catch(e){}}
+ L.push('שיהיה יום מוצלח! 💪');return L.join('\n')}
+function morningBrief(force){if(!force&&localStorage.getItem(LS.brief)==='off')return false;const n=new Date();if(!force&&n.getHours()<6)return false;const today=isoNow();if(!force&&localStorage.getItem(LS.briefDay)===today)return false;
+ localStorage.setItem(LS.briefDay,today);const txt=briefText();if(!txt)return false;push({role:'bot',text:txt});ping(txt);return true}
+
 // ---------- הפעלה ----------
-function tick(){if(weeklyReset()){chat={msgs:[],api:[]};unread=0;localStorage.setItem('assistantUnread',0);badge();draw()}checkReminders()}
+function tick(){if(weeklyReset()){chat={msgs:[],api:[]};unread=0;localStorage.setItem('assistantUnread',0);badge();draw()}checkReminders();morningBrief()}
 tick();badge();setInterval(tick,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
-window.Assistant={send,runTool,checkReminders,tick,systemPrompt,open:openPane,close:closePane,get chat(){return chat},TOOLS};
+window.Assistant={send,runTool,checkReminders,tick,systemPrompt,morningBrief,budgetInsights,shrinkImage,open:openPane,close:closePane,get chat(){return chat},TOOLS};
 })();
