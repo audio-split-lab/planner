@@ -99,7 +99,7 @@ $('#addT').onclick=addT;$('#newT').onkeydown=e=>{if(e.key==='Enter')addT()};
 $('#moveT').onclick=()=>{const o=lt(),k=dk(cur),a=o[k]||[],u=a.filter(x=>!x.done);if(!u.length)return alert('אין משימות פתוחות');
 const n=new Date(cur);n.setDate(n.getDate()+1);const nk=dk(n);o[nk]=(o[nk]||[]).concat(u);o[k]=a.filter(x=>x.done);st(o);renderT();alert(`הועברו ${u.length} משימות למחר`)};
 const tab=t=>{[['#schedW','#tabS'],['#todo','#tabT'],['#sum','#tabU'],['#budget','#tabB']].forEach(([p,b],i)=>{$(p).hidden=i!==t;$(p).style.display=i===t?'block':'none';$(b).classList.toggle('on',i===t)})};
-$('#tabS').onclick=()=>tab(0);$('#tabT').onclick=()=>tab(1);$('#tabU').onclick=()=>{tab(2);if(typeof markWSOpened==='function'&&wsums().length){markWSOpened();renderSum()}};
+$('#tabS').onclick=()=>tab(0);$('#tabT').onclick=()=>tab(1);$('#tabU').onclick=()=>{tab(2);if(window.SummaryUI)SummaryUI.onTab()};
 const dur=m=>m<60?m+' דק׳':Math.floor(m/60)+' שע׳'+(m%60?' ו־'+m%60+' דק׳':'');
 const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function renderSum(){const ts=load()[dk(cur)]||[],td=lt()[dk(cur)]||[];const sd=ts.filter(t=>t.done),dd=td.filter(t=>t.done);
@@ -110,51 +110,14 @@ h+=`<div style="margin:6px 0"><span class="dot" style="background:${CATS[k][1]}"
 if(!any)h+='<p style="color:var(--muted)">אין עדיין פריטים ליום הזה</p>';
 h+='<h3>✅ מה הושלם</h3>';const done=[...sd.map(t=>fmt(t.start)+' '+t.title),...dd.map(t=>t.text)];h+=done.length?'<ul>'+done.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<p style="color:var(--muted)">עוד לא הושלם כלום</p>';
 const open_=[...ts.filter(t=>!t.done).map(t=>fmt(t.start)+' '+t.title),...td.filter(t=>!t.done).map(t=>t.text)];if(open_.length)h+='<h3>⏳ לא הושלם</h3><ul>'+open_.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>';
-const past=wsums();if(past.length)h+='<h3>📊 סיכום השבוע</h3>'+past.map(x=>`<details class="ws-old" open><summary>${wsLabel(x)}${x.openedAt?` · ייעלם בעוד ${wsLeft(x)}`:''}</summary>${wsHTML(x)}</details>`).join('');
+if(window.SummaryUI)h+=SummaryUI.html();
 $('#sum').innerHTML=h}
-// ===== סיכום שבועי: נוצר בשבת ב-22:00; לא נמחק באיפוס; נעלם 24 שעות אחרי הפתיחה הראשונה; סיכום חדש מחליף ישן (אין היסטוריה) =====
-const WS_TTL=24*60*60000,wsums=()=>{try{const x=JSON.parse(localStorage.weekSummary||'null');if(x&&(x.openedAt?Date.now()-x.openedAt>=WS_TTL:Date.now()>=(x.expAt||Infinity))){localStorage.removeItem('weekSummary');localStorage.removeItem('weekSummaryNew');return[]}return x?[x]:[]}catch(e){return[]}};
-const wsLeft=x=>{const m=Math.max(1,Math.ceil((x.openedAt+WS_TTL-Date.now())/60000));return m>=60?Math.ceil(m/60)+' שע׳':m+' דק׳'};
-function markWSOpened(){const x=wsums()[0];if(x&&!x.openedAt){x.openedAt=Date.now();localStorage.weekSummary=JSON.stringify(x)}}
-const isoD=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-function makeWeekSummary(oldKey,quiet){if(!oldKey||!/^\d{4}-\d{1,2}-\d{1,2}$/.test(oldKey))return false;const pl=load(),td=lt(),[y,mo,da]=oldKey.split('-').map(Number),days=[];for(let i=0;i<7;i++)days.push(new Date(y,mo-1,da+i));
- let ts=[],tds=[];const perDay=days.map(d=>{const a=pl[dk(d)]||[],b=td[dk(d)]||[];ts=ts.concat(a);tds=tds.concat(b);return a.filter(t=>t.done).length+b.filter(t=>t.done).length});
- const cats={};for(const k in CATS){const a=ts.filter(t=>(t.cat||'other')===k),b=tds.filter(t=>t.cat===k);if(!a.length&&!b.length)continue;cats[k]={n:a.length+b.length,nd:a.filter(t=>t.done).length+b.filter(t=>t.done).length,min:a.reduce((x,t)=>x+ +t.dur,0),doneMin:a.filter(t=>t.done).reduce((x,t)=>x+ +t.dur,0)}}
- const isos=days.map(isoD),from=isos[0],to=isos[6],mk=to.slice(0,7),endDay=+to.slice(8);let bud={};try{bud=JSON.parse(localStorage.budget||'{}')}catch(e){}
- const ent=(bud.entries||[]).filter(e=>e.kind==='expense'),r2=n=>Math.round(n*100)/100,wk=ent.filter(e=>isos.includes(String(e.date))),byCat={};wk.forEach(e=>byCat[e.category||'other']=r2((byCat[e.category||'other']||0)+ +e.amount));
- let month=ent.filter(e=>String(e.date).slice(0,7)===mk&&+String(e.date).slice(8,10)<=endDay).reduce((x,e)=>x+ +e.amount,0);for(const r of bud.recurring||[])if(r.kind==='expense'&&r.start<=mk&&(!r.end||r.end>=mk)&&+r.day<=endDay)month+= +r.amount;
- const week=r2(wk.reduce((x,e)=>x+ +e.amount,0));if(!ts.length&&!tds.length&&!week)return false;const best=perDay.indexOf(Math.max(...perDay));
- const s={id:oldKey,from,to,tasks:{done:ts.filter(t=>t.done).length,total:ts.length,planMin:ts.reduce((x,t)=>x+ +t.dur,0),doneMin:ts.filter(t=>t.done).reduce((x,t)=>x+ +t.dur,0)},todos:{done:tds.filter(t=>t.done).length,total:tds.length},cats,bestDay:perDay[best]?best:-1,spent:{week,byCat,month:r2(month),monthKey:mk},made:Date.now(),expAt:new Date(y,mo-1,da+6,22).getTime()+30*3600000}; // לא נפתח: נמחק אחרי 30 שעות משבת 22:00 (שני 04:00)
- if(quiet){const o=wsums()[0];if(!o||o.id!==oldKey)return false;if(o.openedAt)s.openedAt=o.openedAt}localStorage.weekSummary=JSON.stringify(s);if(!quiet)localStorage.weekSummaryNew=oldKey;return true}
-const wsLabel=s=>{const f=x=>{const [,m,d]=x.split('-').map(Number);return d+'/'+m};return`שבוע \u2066${f(s.from)}–${f(s.to)}\u2069`};
-const ils=n=>`<span class="b-money">${new Intl.NumberFormat('he-IL',{style:'currency',currency:'ILS',maximumFractionDigits:0}).format(n||0)}</span>`;
-function wsHTML(s){const BC=(window.BudgetAPI||{}).categories||{};let h=`<div class="cards"><div class="card"><b>${s.tasks.done}/${s.tasks.total}</b>לו״ז בוצעו</div><div class="card"><b>${s.todos.done}/${s.todos.total}</b>משימות בוצעו</div><div class="card"><b>${dur(s.tasks.doneMin)}</b>זמן שבוצע</div><div class="card"><b>${ils(s.spent.week)}</b>הוצאות השבוע</div></div>`;
- if(s.bestDay>=0)h+=`<p class="ws-line">🏆 היום הכי פרודוקטיבי: יום ${DN[s.bestDay]}</p>`;
- const ck=Object.keys(s.cats||{});if(ck.length){h+='<h3>⏱️ לפי קטגוריה</h3>';const mx=Math.max(1,...ck.map(k=>s.cats[k].min));ck.forEach(k=>{const c=s.cats[k],cc=CATS[k]||CATS.other;h+=`<div style="margin:6px 0"><span class="dot" style="background:${cc[1]}"></span>${cc[0]}: ${c.nd}/${c.n} בוצעו${c.min?` · ${dur(c.min)} בלו״ז`:''}<div class="bar"><i style="width:${c.min?c.min/mx*100:c.nd/c.n*100}%;background:${cc[1]}"></i></div></div>`})}
- const bc=Object.entries(s.spent.byCat||{}).sort((a,b)=>b[1]-a[1]);h+='<h3>💰 הוצאות</h3>'+(bc.length?'<ul>'+bc.slice(0,4).map(([k,v])=>`<li>${esc((BC[k]||['📦 אחר'])[0])}: ${ils(v)}</li>`).join('')+'</ul>':'<p class="ws-line">לא נרשמו הוצאות השבוע</p>')+`<p class="ws-line">סה״כ הוצאות מתחילת החודש: ${ils(s.spent.month)}</p>`;return h}
-function showWeekSummary(){const id=localStorage.weekSummaryNew;if(!id)return;const s=wsums().find(x=>x.id===id);if(!s){localStorage.removeItem('weekSummaryNew');return}
- let d=document.getElementById('wsum');if(!d){d=document.createElement('dialog');d.id='wsum';document.body.append(d)}
- localStorage.weekSummaryCard=id;markWSOpened();
- d.innerHTML=`<button type="button" class="ws-x" aria-label="סגור">✕</button><h2>📊 סיכום השבוע שלך</h2><p class="ws-line">${wsLabel(s)} · זמין גם בלשונית "סיכום" – ייעלם בעוד 24 שעות.</p>${wsHTML(s)}<button type="button" class="p ws-ok">תודה 👍</button>`;d.querySelector('.ws-x').onclick=()=>d.close();d.onclick=e=>{if(e.target===d)d.close()};
- d.querySelector('.ws-ok').onclick=()=>d.close();d.onclose=()=>{localStorage.removeItem('weekSummaryNew');renderSum()};if(!d.open)d.showModal()}
-// משלוח: התראה אחת בטלפון לכל שבוע (אם ההתראות פעילות); אחרת – הכרטיס מוצג פעם אחת בפתיחה הבאה
-async function deliverWeekSummary(){const id=localStorage.weekSummaryNew;if(!id)return;const s=wsums().find(x=>x.id===id);if(!s){localStorage.removeItem('weekSummaryNew');return}
- if(localStorage.weekSummaryNotified!==id){localStorage.weekSummaryNotified=id; // התראה אחת בלבד לכל שבוע
-  if(window.Notification&&Notification.permission==='granted'){const done=s.tasks.done+s.todos.done,total=s.tasks.total+s.todos.total,body=`השלמת ${done} מתוך ${total} משימות`+(s.spent.week?` · הוצאות השבוע: ${Math.round(s.spent.week).toLocaleString('he-IL')} ₪`:'')+' · לחץ לצפייה';
-   try{const r=await navigator.serviceWorker?.getRegistration();if(r)await r.showNotification('📊 סיכום השבוע שלך מוכן',{body,icon:'icon.svg',tag:'week-summary',data:{url:'./?summary=1'}});else{const n=new Notification('📊 סיכום השבוע שלך מוכן',{body,tag:'week-summary'});n.onclick=()=>{window.focus();openSummaryTab();n.close()}}}catch(e){}}}
- if(localStorage.weekSummaryCard===id){localStorage.removeItem('weekSummaryNew');return}
- if(!document.hidden)showWeekSummary()} // הכרטיס – פעם אחת, בפתיחה הבאה של היומן
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(deliverWeekSummary,400)});
-function openSummaryTab(){const nid=localStorage.weekSummaryNew;if(nid)localStorage.weekSummaryCard=nid;localStorage.removeItem('weekSummaryNew');markWSOpened();const d=document.getElementById('wsum');if(d&&d.open)d.close();tab(2);renderSum();const x=document.querySelector('#sum details.ws-old');if(x){x.open=true;x.scrollIntoView({behavior:'smooth',block:'start'})}}
-if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.type==='summary')openSummaryTab()});
-window.addEventListener('load',()=>setTimeout(()=>{if(/[?&]summary=1/.test(location.search)){history.replaceState(null,'',location.pathname);openSummaryTab()}else deliverWeekSummary()},300));
 
 const _r=render;render=function(){_r();renderT();renderSum()};
 const pday=()=>{const d=new Date();if(d.getHours()*60+d.getMinutes()<150)d.setDate(d.getDate()-1);d.setHours(0,0,0,0);return d};
 const wstart=()=>{const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-d.getDay());return d};
 let ws,lastP;
-function weekCheck(){const w=wstart(),k=dk(w);if(localStorage.weekStart!==k){localStorage.weekStart=k;localStorage.planner='{}';localStorage.todos='{}'} // הסיכום השבועי לא נמחק באיפוס – הוא נעלם 24 שעות אחרי שנפתח
-else{const n=new Date();if(n.getDay()===6&&n.getHours()>=22){try{if(localStorage.weekSummaryMade!==k){localStorage.weekSummaryMade=k;if(makeWeekSummary(k))setTimeout(deliverWeekSummary,ws?0:1500)}else if((JSON.parse(localStorage.weekSummary||'null')||{}).id===k)makeWeekSummary(k,true)}catch(e){}}if(localStorage.weekSummary&&!wsums().length&&ws){renderSum();const d=document.getElementById('wsum');if(d&&d.open)d.close()}} // מוצ"ש 22:00: סיכום + התראה אחת + כרטיס פעם אחת; עד 00:00 מתעדכן בשקט. נשמר עד שנפתח, ונעלם 24 שעות אחרי הפתיחה הראשונה (כמו "צפייה חד-פעמית")
+function weekCheck(){const w=wstart(),k=dk(w);if(localStorage.weekStart!==k){localStorage.weekStart=k;localStorage.planner='{}';localStorage.todos='{}'} // הסיכומים (summary.js) לא נמחקים באיפוס השבועי
 const p=pday();if(p<w)p.setTime(w.getTime());const pk=dk(p);
 if(!ws||dk(ws)!==k||lastP!==pk){ws=w;lastP=pk;cur=new Date(p);render()}}
 const DN=['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
@@ -164,4 +127,4 @@ x.onclick=()=>{cur=d;render()};b.append(x)}$('#moveT').disabled=cur.getDay()===6
 const _r2=render;render=function(){if(ws){_r2();renderW()}};
 setInterval(weekCheck,60000);weekCheck();check();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
-</script><script src="budget.js"></script><script src="assistant.js"></script></body></html>
+</script><script src="budget.js"></script><script src="summary.js"></script><script src="assistant.js"></script></body></html>

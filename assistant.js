@@ -1,7 +1,7 @@
 (()=>{'use strict';
 // ===== עוזר אישי ביומן: צאט + מיקרופון + תזכורות =====
 const Q=s=>document.querySelector(s);
-const LS={chat:'assistantChat',rem:'assistantRem',week:'assistantWeek',remOn:'assistantRemind',owner:'assistantOwner',device:'assistantDevice',quota:'assistantQuota',brief:'assistantBrief',briefDay:'assistantBriefDay'};
+const LS={chat:'assistantChat',rem:'assistantRem',week:'assistantWeek',remOn:'assistantRemind',owner:'assistantOwner',device:'assistantDevice',quota:'assistantQuota',briefDay:'assistantBriefDay',lastUser:'assistantLastUserAt',lastPro:'assistantLastProactiveAt',proSince:'assistantProactiveSince'};
 // כתובת השרת של העוזר (מגביל שימוש) – מקום אחד לשנות
 const PROXY=window.ASSISTANT_PROXY||'https://netanel-planner-ai.onrender.com/api/gemini';
 const QUOTA_URL=PROXY.replace(/\/gemini$/,'/quota');
@@ -101,6 +101,7 @@ const TOOLS=[
  {name:'add_investment',description:'הוספת השקעה/חיסכון לאחזקות.',parameters:{type:'object',properties:{name:S_('string','שם'),type:S_('string','סוג',{enum:HOLD}),invested:S_('number','סכום שהושקע'),value:S_('number','שווי נוכחי (אם לא ידוע – שווה לסכום שהושקע)')},required:['name','type','invested']}},
  {name:'update_investment',description:'עדכון אחזקה קיימת לפי id.',parameters:{type:'object',properties:{id:S_('string','id'),invested:S_('number','סכום שהושקע'),value:S_('number','שווי נוכחי'),name:S_('string','שם')},required:['id']}},
  {name:'set_category_target',description:'קביעת יעד (תקרת תקציב) חודשי לקטגוריית הוצאה בחודש הנוכחי. 0 מוחק את היעד.',parameters:{type:'object',properties:{category:S_('string','',{enum:['food','car','home','bills','fun','shop','health','other']}),amount:S_('number','סכום היעד')},required:['category','amount']}},
+ {name:'get_summaries',description:'קריאת הסיכומים השבועיים של החודש הנוכחי (כל שבת 22:00) והסיכום החודשי אם קיים. השתמש כשמבקשים "איך השתפרתי", "תשווה לשבוע שעבר", "איך היה החודש".'},
  {name:'get_budget_insights',description:'ניתוח תקציב: לכל קטגוריה – כמה הוצא החודש, לעומת אותה תקופה בחודש שעבר, החודש הקודם המלא וממוצע 3 חודשים קודמים, תחזית לסוף החודש, יעד ואחוז ניצול, וסימון חריגות. השתמש כשמבקשים "איך אני עם התקציב", "על מה אני מוציא הכי הרבה", "איפה לחסוך".'},
  {name:'plan_day',description:'תכנון יום: מקבל רשימת דברים (בלי שעות, או חלקם עם שעה מועדפת) ומשבץ אותם במשבצות פנויות ביום שנבחר – מכבד משימות קיימות, רשת של 15 דק׳, 08:00–02:00, בשבת עד 23:45, והיום – רק מעכשיו והלאה. ברירת מחדל: משבץ ושומר; dry_run=true רק מציע בלי לשמור.',parameters:{type:'object',properties:{date:S_('string','YYYY-MM-DD בשבוע הנוכחי'),items:S_('array','הדברים לשבץ, לפי סדר העדיפות',{items:{type:'object',properties:{title:S_('string','כותרת'),duration_min:S_('integer','משך משוער בדקות (כפולה של 15). אם לא נאמר – הערך בעצמך באופן סביר'),category:S_('string','קטגוריה',{enum:Object.keys(PCATS)}),start:S_('string','שעה מועדפת HH:MM אם המשתמש ביקש')},required:['title']}}),start_after:S_('string','לא לפני השעה HH:MM'),end_before:S_('string','לסיים עד HH:MM'),gap_min:S_('integer','הפסקה בדקות בין משימות (ברירת מחדל 0)'),dry_run:S_('boolean','true = רק להציע, לא לשמור')},required:['date','items']}}
 
@@ -139,6 +140,9 @@ const EXEC={
  add_investment(a){const inv=num(a.invested),val=a.value==null?inv:num(a.value);if(!String(a.name||'').trim())return fail('חסר שם');if(!(inv>=0)||!(val>=0))return fail('חסר סכום');const o={name:String(a.name).trim(),type:HOLD.includes(a.type)?a.type:'אחר',invested:inv,value:val,id:uid()};const d=rb();d.holdings.push(o);wb(d);refreshBudget();return{ok:true,investment:o}},
  update_investment(a){const d=rb(),h=d.holdings.find(x=>x.id===a.id);if(!h)return fail('לא נמצאה אחזקה');if(a.invested!=null){if(!(num(a.invested)>=0))return fail('סכום לא תקין');h.invested=num(a.invested)}if(a.value!=null){if(!(num(a.value)>=0))return fail('שווי לא תקין');h.value=num(a.value)}if(a.name)h.name=String(a.name).trim();wb(d);refreshBudget();return{ok:true,investment:h}},
  get_budget_insights:()=>({ok:true,...budgetInsights()}),
+ get_summaries(){const C=B()?.categories||{},cn=k=>(C[k]||['אחר'])[0],w=J('weekSummaries',[]).slice().sort((a,b)=>String(a.from).localeCompare(String(b.from)));const m=window.SummaryUI?SummaryUI.month():J('monthSummary',null);
+  return{ok:true,note:w.length?'':'אין עדיין סיכומים שבועיים החודש (נוצרים כל שבת ב-22:00 ונמחקים ב-1 לחודש)',weekly:w.map((s,i)=>({week_number:i+1,from:s.from,to:s.to,schedule_done:s.tasks.done,schedule_total:s.tasks.total,todos_done:s.todos.done,todos_total:s.todos.total,completion_pct:(s.tasks.total+s.todos.total)?Math.round((s.tasks.done+s.todos.done)/(s.tasks.total+s.todos.total)*100):null,minutes_done:s.tasks.doneMin,minutes_planned:s.tasks.planMin,by_category:Object.fromEntries(Object.entries(s.cats||{}).map(([k,c])=>[PCATS[k]||k,{done:c.nd,total:c.n,minutes:c.min}])),best_day:s.bestDay>=0?DN[s.bestDay]:null,spent_week:s.spent.week,spent_by_category:Object.fromEntries(Object.entries(s.spent.byCat||{}).map(([k,v])=>[cn(k),v])),spent_month_so_far:s.spent.month})),
+   monthly:m?{month:m.month,tasks:m.tasks,budget:m.budget,categories:(m.cats||[]).map(c=>({name:cn(c.k),this_month:c.v,prev_month:c.pv})),targets:(m.targets||[]).map(t=>({name:cn(t.k),target:t.target,spent:t.spent,pct:t.pct})),best_week:m.best,worst_week:m.worst,insights:m.insights}:null}},
  plan_day(a){const g=getDay(a.date);if(g.err)return fail(g.err);const items=(Array.isArray(a.items)?a.items:[]).filter(x=>x&&String(x.title||'').trim());if(!items.length)return fail('חסרה רשימה של דברים לשבץ – שאל את המשתמש');
   const sat=g.d.getDay()===6,k=dkey(g.d),all=lp(),arr=all[k]||[],busy=arr.map(t=>[t.start,t.start+ +t.dur]),gap=Math.max(0,Math.round((+a.gap_min||0)/15)*15);
   let from=8*60,to=sat?24*60:26*60;if(a.start_after){const t=parseTime(a.start_after,sat);if(t.err)return fail(t.err);from=Math.max(from,t.v)}
@@ -179,6 +183,7 @@ function systemPrompt(){const now=new Date(),C=B()?.categories||{},S=B()?.SUGG||
 - כשמבקשים מצב/סיכום – השתמש בנתונים למטה (או get_state) וסכם יפה.
 - משימה שחוזרת השבוע ("כל יום השבוע ב-18:00 חוץ משישי", "ראשון שלישי וחמישי"): add_task על היום הראשון + repeat_days עם שאר התאריכים מהרשימה. רק בשבוע הנוכחי – זה לא עובר לשבוע הבא. אחרי זה ציין באילו ימים נוסף ועל אילו דילגת ולמה. בעריכה/מחיקה של משימה עם repeats_this_week – שאל "רק היום או כל השבוע?" ואז all_week בהתאם.
 - תכנון יום: כשהמשתמש מונה כמה דברים ליום מסוים בלי שעות ("מחר יש לי: כביסה, סופר, להתקשר לאמא") – קרא ל-plan_day עם כל הדברים (הערך משך סביר לכל אחד אם לא נאמר; אם לא ברור לאיזה יום – שאל). אחרי השיבוץ אשר בקצרה מה שובץ ומתי (רשימה עם שעות), מה לא נכנס ולמה, ושאפשר להזיז. אם ביקש "תציע קודם" – dry_run=true ואז שמור אחרי אישור.
+- "איך השתפרתי" / "תשווה לשבוע שעבר" / "איך היה החודש" – קרא ל-get_summaries והשווה בין השבועות: אחוז השלמה, זמן לפי קטגוריה, הוצאות (מה עלה/ירד), ותן מחמאה כנה + טיפ אחד. אם אין עדיין סיכומים – הסבר שהם נוצרים כל שבת ב-22:00.
 - "איך אני עם התקציב" / "על מה אני מוציא הכי הרבה" / "איפה לחסוך" – קרא ל-get_budget_insights ותן 2–4 תובנות קצרות וקונקרטיות עם מספרים (מה עלה/ירד לעומת אותה תקופה בחודש שעבר, מה קרוב ליעד, כמה נשאר), ועצה אחת מעשית.
 - צילום קבלה: כשמגיעה תמונה – חלץ את הסכום הכולל לתשלום (לא מע"מ ולא סכום ביניים), את שם העסק וקטגוריה מתאימה. אם הכל ברור – רשום מיד עם add_expense (תיאור: שם העסק עם אימוג׳י מתאים, או ההצעה המתאימה מהרשימה) ואשר מה נרשם. אם הסכום לא קריא, יש כמה סכומים, או שהקטגוריה לא ברורה – שאל לאישור לפני הרישום. אם זו לא קבלה – אמור זאת בעדינות.
 קטגוריות לו"ז: ${Object.entries(PCATS).map(([k,v])=>k+'='+v).join(', ')}.
@@ -190,8 +195,9 @@ ${Object.keys(C).map(k=>`${k}=${C[k][0]}: ${(S[k]||[]).join(' | ')}`).join('\n')
 • לו"ז: משבצות 15 דק׳ מ-08:00 עד 02:00 (בשבת עד 23:45); עד 02:30 בלילה עדיין נחשב היום הקודם. הוספה: לוחצים על משבצת ריקה ← "משימה חדשה": כותרת, שעת התחלה, משך (15 דק׳ עד 8 שע׳), קטגוריה (עבודה/אישי/קניות/אחר, לכל אחת צבע – מקרא למעלה), הערה ← "שמור". עריכה: לוחצים על המשימה ← משנים ← "שמור"; מחיקה: "מחק". ☐ בפינת המשימה = סימון בוצע (✅ וקו חוצה). 10 דקות לפני משימה יש צפצוף, רטט והתראה ⏰.
 • משימות (בלי שעה): כותבים ב"מה צריך לעשות היום?", בוחרים קטגוריה (או "ללא") ← "הוסף" או Enter. ☐ או לחיצה על הטקסט = בוצע; ✏️ עריכה; 🗑️ מחיקה. "העבר משימות שלא הושלמו למחר ←" מעביר את הפתוחות ליום הבא (לא בשבת). כל יום עם רשימה משלו.
 • משימה שחוזרת השבוע: בטופס "משימה חדשה" מסמנים "🔁 חוזר השבוע" ובוחרים ימים (א׳–ש׳; ברירת מחדל: מהיום שנבחר ועד שבת) ← "שמור". נוצרת אותה משימה באותה שעה בכל יום שנבחר בשבוע הנוכחי בלבד; יום שהמשבצת בו תפוסה מדולג (מופיעה הודעה). בעריכה או מחיקה של משימה כזו נשאל "רק היום" / "כל השבוע". זה לא עובר לשבוע הבא – מתאפס עם כל היומן.
-• סיכום: ליום הנבחר – כמה בוצעו בלו"ז ובמשימות, זמן שבוצע/מתוכנן, התקדמות לפי קטגוריה, "✅ מה הושלם" ו"⏳ לא הושלם". כשיש סיכום שבועי פתוח מופיע שם גם "📊 סיכום השבוע" (נעלם 24 שעות אחרי שנפתח).
-• סיכום שבועי: בשבת ב-22:00 נוצר "📊 סיכום השבוע שלך" (לו"ז ומשימות שבוצעו, זמן לפי קטגוריה, היום הכי פרודוקטיבי, הוצאות השבוע ומתחילת החודש). נשלחת התראה אחת לטלפון "📊 סיכום השבוע שלך מוכן" (למשל "השלמת 12 מתוך 15 משימות"; לחיצה פותחת את לשונית "סיכום"), ובפתיחה הבאה של היומן מופיע פעם אחת כרטיס קטן – סוגרים בלחיצה אחת. הסיכום עובד כמו "צפייה חד-פעמית": הוא נשמר (גם אחרי האיפוס של 00:00) עד שפותחים אותו – בכרטיס, בלשונית "סיכום" או מההתראה – ונעלם 24 שעות אחרי הפתיחה הראשונה. אם לא פותחים אותו בכלל – הוא נמחק לבד ביום שני ב-04:00 (30 שעות אחרי שבת 22:00). סיכום של שבוע חדש מחליף ישן; אין היסטוריה. ההתראה נשלחת רק אם התראות מופעלות והיומן פתוח (גם ברקע) בשבת בין 22:00 ל-00:00, אחרת רק הכרטיס בפתיחה הבאה.
+• סיכום: ליום הנבחר – כמה בוצעו בלו"ז ובמשימות, זמן שבוצע/מתוכנן, התקדמות לפי קטגוריה, "✅ מה הושלם" ו"⏳ לא הושלם". למטה "📅 סיכום חודשי" (כשיש) ו"📊 סיכומים שבועיים" עם מעבר בין השבועות.
+• סיכום שבועי: כל שבת ב-22:00 נוצר "📊 סיכום השבוע שלך" (לו"ז ומשימות שבוצעו, זמן לפי קטגוריה, היום הכי פרודוקטיבי, הוצאות השבוע ומתחילת החודש, והשוואה לשבוע הקודם: ▲/▼ בהשלמה, בזמן ובהוצאות). נשלחת התראה אחת "📊 סיכום השבוע שלך מוכן" (לחיצה פותחת את לשונית "סיכום"), ובפתיחה הבאה מופיע פעם אחת כרטיס – סוגרים בלחיצה. כל הסיכומים השבועיים של החודש נשמרים (גם אחרי האיפוס השבועי) ובלשונית "סיכום" עוברים ביניהם עם → / ← או "שבוע 1", "שבוע 2"…; כולם נמחקים ב-1 לחודש ב-00:00.
+• סיכום חודשי: ביום האחרון של כל חודש (28/29/30/31 – לפי החודש) ב-20:00 נוצר "📅 הסיכום החודשי שלך": משימות שבוצעו בכל החודש, שבוע אחרי שבוע (🏆 הכי טוב / 🐢 הכי חלש), הוצאות לפי קטגוריה לעומת החודש הקודם, הכנסות, כמה נשאר, יעדים שעמדת בהם או חרגת, ותובנות. התראה אחת "📅 הסיכום החודשי שלך מוכן" + כרטיס חד-פעמי בפתיחה הבאה, וזמין בלשונית "סיכום". נעלם 72 שעות אחרי שפתחת אותו, או 72 שעות אחרי שנוצר אם לא נפתח. לא מושפע מהאיפוס השבועי. התראות נשלחות רק אם הן מופעלות והיומן פתוח (גם ברקע) באותו זמן; אחרת הכרטיס יופיע בפתיחה הבאה.
 • איפוס שבועי: כל מוצאי שבת ב-00:00 נמחקים אוטומטית הלו"ז, המשימות, השיחה עם העוזר והתזכורות – לא צריך למחוק את השיחה ידנית. נשמרים: כל התקציב וההשקעות, מצב כהה וההגדרות. אי אפשר לתכנן שבוע הבא מראש.
 • תקציב: למעלה "→ חודש קודם" / "חודש הבא ←". מדורים: סקירה | הכנסות | הוצאות | קבועות | השקעות. הכפתור הגדול "＋" משתנה לפי המדור ("תנועה חדשה" / "הכנסה חדשה" / "הוצאה / הכנסה קבועה" / "השקעה או חיסכון").
  – הוצאה: מדור הוצאות ← "＋ תנועה חדשה" ← בוחרים "קטגוריית הוצאה" ← לוחצים על "תיאור" ונפתח "בחר תיאור" עם הצעות + אימוג׳י לפי הקטגוריה (או כותבים חופשי ← "אישור") ← "סכום ₪" ← "שמור". תנועה נרשמת להיום.
@@ -200,7 +206,7 @@ ${Object.keys(C).map(k=>`${k}=${C[k][0]}: ${(S[k]||[]).join(' | ')}`).join('\n')
  – סקירה: הכנסות, הוצאות כולל קבועות, הפקדות לחיסכון, "נשאר לך". מתחת: "📊 לאן הלך הכסף" – גרף עוגה לפי קטגוריות עם סה"כ, אחוז מכל קטגוריה והשוואה (▲ עלייה אדומה / ▼ ירידה ירוקה) לאותה תקופה בחודש שעבר; בחודש קודם – לחודש שלפניו. לכל קטגוריה שדה "יעד ₪" לחודש (נשמר לכל חודש בנפרד): ב-80% "⚠️ קרוב לתקציב", ב-100% "⚠️ הגעת לתקציב" (+התראה).
  – השקעות: אחזקות (קרן השתלמות/מניות/פיקדון/קריפטו/חיסכון/אחר) עם הושקע, שווי נוכחי ורווח/הפסד; "עריכה"/"מחיקה". לא מתאפסות לפי חודש וניתנות לעריכה תמיד.
  – חודשים קודמים: 🔒 צפייה בלבד + טבלת "תוצאות החודש". הנתונים נשמרים רק בטלפון, בלי חיבור לבנק.
-• העוזר (אתה): כפתור 🤖 בפינה (מספר עליו = הודעות שלא נקראו) פותח את "🤖 העוזר שלי"; ✕ סוגר. כותבים ושולחים ב-➤, או 🎤 לדיבור בעברית (⏹ לעצירה). 📷 = צילום קבלה: מצלמים ואני מזהה סכום, עסק וקטגוריה ורושם את ההוצאה (שואל אם משהו לא ברור). ☀️ בוקר טוב יומי: בפתיחה הראשונה של היום אחרי 06:00 אני כותב סיכום קצר – מה בלו"ז היום, משימות פתוחות, כמה נשאר בתקציב החודש, והתראה אם קטגוריה גבוהה מהרגיל; אפשר לכבות בהגדרות. אפשר לבקש ממני "איך אני עם התקציב" לניתוח מלא, ו"תתכנן לי את מחר: …" כדי שאשבץ דברים במשבצות הפנויות. ⚙️ הגדרות: תיבת "תזכורות: לשאול אותי אם ביצעתי משימות", תיבת "☀️ בוקר טוב יומי", "שמור", "🧹 נקה את השיחה" (רק אם רוצים למחוק עכשיו; השיחה גם נמחקת אוטומטית כל מוצאי שבת ב-00:00, בלי צורך למחוק ידנית). תזכורות: כשמשימת לו"ז מסתיימת אני שואל עם "✅ בוצע" / "עוד לא" (עוד לא = שואל שוב בעוד שעה, עד 3 פעמים); ב-13:00 וב-20:30 שואל על משימות פתוחות.
+• העוזר (אתה): כפתור 🤖 בפינה (מספר עליו = הודעות שלא נקראו) פותח את "🤖 העוזר שלי"; ✕ סוגר. כותבים ושולחים ב-➤, או 🎤 לדיבור בעברית (⏹ לעצירה). 📷 = צילום קבלה: מצלמים ואני מזהה סכום, עסק וקטגוריה ורושם את ההוצאה (שואל אם משהו לא ברור). ☀️ בוקר טוב יומי (תמיד פעיל, אין כפתור לכיבוי): בפתיחה הראשונה של היום אחרי 06:00 אני כותב סיכום קצר – מה בלו"ז היום, משימות פתוחות, כמה נשאר בתקציב החודש, והתראה אם קטגוריה גבוהה מהרגיל. כלל שקט: אם לא ענית לי 24 שעות מאז ההודעה היזומה הראשונה שלי שלא נענתה – אני מפסיק לשלוח כל הודעה יזומה (בוקר טוב, תזכורות, שאלות על משימות) עד שתכתוב לי, תקליט, תשלח תמונה או תלחץ על כפתור כמו "✅ בוצע"/"עוד לא" – ואז הכל חוזר כרגיל. הסיכומים השבועיים והחודשיים ממשיכים להגיע תמיד. אפשר לבקש ממני "איך אני עם התקציב" לניתוח מלא, ו"תתכנן לי את מחר: …" כדי שאשבץ דברים במשבצות הפנויות. ⚙️ הגדרות: תיבת "תזכורות: לשאול אותי אם ביצעתי משימות",  "שמור", "🧹 נקה את השיחה" (רק אם רוצים למחוק עכשיו; השיחה גם נמחקת אוטומטית כל מוצאי שבת ב-00:00, בלי צורך למחוק ידנית). תזכורות: כשמשימת לו"ז מסתיימת אני שואל עם "✅ בוצע" / "עוד לא" (עוד לא = שואל שוב בעוד שעה, עד 3 פעמים); ב-13:00 וב-20:30 שואל על משימות פתוחות.
 • התקנה כאפליקציה: אייפון – Safari ← שיתוף ← "הוסף למסך הבית"; אנדרואיד – Chrome ← ⋮ ← "התקן אפליקציה"/"הוסף למסך הבית". עובד גם בלי אינטרנט (חוץ מהעוזר).
 • דברים שרק המשתמש עושה (הדרך אותו): מצב כהה, הפעלת התראות, העברת משימות למחר, עריכת טקסט של משימה בלי שעה, עריכת הכנסה/הוצאה/קבועה קיימת (לוחצים "עריכה" ליד הפריט), מעבר בין חודשים, הגדרות העוזר.
 ${pend.length?'תזכורות פתוחות ששאלת עליהן (אם המשתמש עונה "עשיתי"/"בוצע" – סמן בכלי המתאים): '+pend.join(', '):''}
@@ -239,7 +245,6 @@ pane.innerHTML=`<div class="as-head"><button type="button" class="as-x" aria-lab
 <button type="button" class="as-delkey" hidden>🗑️ הסר קוד</button>
 </div>
 <label class="as-chk"><input type="checkbox" class="as-rem"> תזכורות: לשאול אותי אם ביצעתי משימות</label>
-<label class="as-chk"><input type="checkbox" class="as-brief"> ☀️ בוקר טוב יומי: סיכום קצר של היום בכל בוקר</label>
 <div class="as-row"><button type="button" class="as-save">שמור</button></div>
 <button type="button" class="as-clear">🧹 נקה את השיחה</button>
 <p class="as-small">🔒 השיחה מתאפסת כל מוצאי שבת ב-00:00 ביחד עם היומן. נתוני התקציב לא נמחקים.</p></div></div>
@@ -267,8 +272,8 @@ function loadSet(){const k=getOwner();syncOwnerUI();const keyEl=pane.querySelect
  if(st){st.hidden=!k;st.innerHTML=k?'✅ קוד אישי שמור':'';st.className='as-kstat'+(k?' yes':'')}
  if(lab)lab.textContent=k?'להחלפת הקוד – הדבק קוד חדש (אפשר להשאיר ריק)':'קוד אישי';
  if(del)del.hidden=!k;
- pane.querySelector('.as-rem').checked=localStorage.getItem(LS.remOn)!=='off';pane.querySelector('.as-brief').checked=localStorage.getItem(LS.brief)!=='off'}
-pane.querySelector('.as-save').onclick=()=>{const box=pane.querySelector('.as-owner');const k=(!box.hidden&&pane.querySelector('.as-key'))?pane.querySelector('.as-key').value.trim():'';if(k){localStorage.setItem(LS.owner,k);localStorage.removeItem(LS.quota)}localStorage.setItem(LS.remOn,pane.querySelector('.as-rem').checked?'on':'off');localStorage.setItem(LS.brief,pane.querySelector('.as-brief').checked?'on':'off');setEl.hidden=true;msgsEl.hidden=false;draw()};
+ pane.querySelector('.as-rem').checked=localStorage.getItem(LS.remOn)!=='off'}
+pane.querySelector('.as-save').onclick=()=>{const box=pane.querySelector('.as-owner');const k=(!box.hidden&&pane.querySelector('.as-key'))?pane.querySelector('.as-key').value.trim():'';if(k){localStorage.setItem(LS.owner,k);localStorage.removeItem(LS.quota)}localStorage.setItem(LS.remOn,pane.querySelector('.as-rem').checked?'on':'off');setEl.hidden=true;msgsEl.hidden=false;draw()};
 pane.querySelector('.as-delkey').onclick=()=>{if(confirm('להסיר את הקוד האישי מהטלפון?')){localStorage.removeItem(LS.owner);localStorage.removeItem(LS.quota);loadSet()}};
 {const h=pane.querySelector('.as-set-title');let n=0,t=0;h.addEventListener('click',()=>{const now=Date.now();if(now-t>2000)n=0;t=now;if(++n>=5){n=0;ownerReveal=true;syncOwnerUI();loadSet()}})}
 
@@ -279,7 +284,7 @@ pane.querySelector('form').onsubmit=e=>{e.preventDefault();const t=ta.value.trim
 msgsEl.addEventListener('click',e=>{const b=e.target.closest('.as-btns button');if(!b)return;const m=chat.msgs.find(x=>x.id===b.closest('.as-m').dataset.id);if(!m||m.answered)return;answerBtn(m,m.btns[+b.dataset.i])});
 
 let busy=false;
-async function send(text,turn,img){if(busy)return;push({role:'user',text:img?'📷 צילום קבלה'+(text?'\n'+text:''):text});turn=turn||newTurn();
+async function send(text,turn,img){if(busy)return;markUser();push({role:'user',text:img?'📷 צילום קבלה'+(text?'\n'+text:''):text});turn=turn||newTurn();
  busy=true;typing.hidden=false;
  try{const parts=img?[{inlineData:{mimeType:'image/jpeg',data:img}},{text:RECEIPT+(text?'\nהמשתמש הוסיף: '+text:'')}]:[{text}];const api=trimApi(chat.api.concat({role:'user',parts}));let changed=[];
   for(let step=0;step<8;step++){let j;try{j=await gemini(api,{systemInstruction:{parts:[{text:systemPrompt()}]},tools:[{functionDeclarations:TOOLS}]},turn)}
@@ -330,23 +335,28 @@ async function startRec(){let stream;try{stream=await navigator.mediaDevices.get
   catch(e){typing.hidden=true;typing.textContent='העוזר חושב…';push({role:'err',text:'⚠️ '+e.message})}};
  mr.start();micUI(true,'מקליט… לחץ ⏹ כשסיימת')}
 
+// ---------- כלל שקט: אם המשתמש לא הגיב 24 שעות מאז ההודעה היזומה הראשונה שלא נענתה – מפסיקים כל הודעה יזומה (בוקר טוב, תזכורות, נדנודים) עד שהוא פונה שוב. סיכומים שבועיים/חודשיים לא מושפעים ----------
+const SILENCE=24*3600000;
+function markUser(){localStorage.setItem(LS.lastUser,Date.now());localStorage.removeItem(LS.proSince)}
+function markPro(){const n=Date.now();localStorage.setItem(LS.lastPro,n);if(!localStorage.getItem(LS.proSince))localStorage.setItem(LS.proSince,n)}
+function silenced(){const s=+localStorage.getItem(LS.proSince)||0;return !!s&&Date.now()-s>=SILENCE}
 // ---------- תזכורות ----------
 const rem=()=>J(LS.rem,{}),saveRem=o=>W(LS.rem,o);
 function resolveRem(k){const o=rem();if(o[k]){o[k].resolved=true;saveRem(o)}chat.msgs.forEach(m=>{if(!m.answered&&m.btns&&m.btns.some(b=>b.a.k===k)){if(m.btns.every(b=>b.a.k===k||b.a.t==='later'))m.answered=true}});saveChat();draw()}
 async function ping(text){if(pane.hidden||document.hidden){unread++;localStorage.setItem('assistantUnread',unread);badge();if(window.Notification&&Notification.permission==='granted'){try{const r=await navigator.serviceWorker?.getRegistration();r?r.showNotification('העוזר 🤖',{body:text,icon:'icon.svg',tag:'assistant'}):new Notification('העוזר 🤖',{body:text})}catch(e){}}}}
-function answerBtn(m,b){const a=b.a;m.answered=true;
+function answerBtn(m,b){const a=b.a;m.answered=true;markUser();
  if(a.t==='task'){const all=lp(),t=(all[a.day]||[]).find(x=>String(x.id)===String(a.id));if(t){t.done=true;sp(all);refreshPlanner()}const o=rem();if(o[a.k]){o[a.k].resolved=true;saveRem(o)}push({role:'user',text:'✅ בוצע'});push({role:'bot',text:t?`מעולה! סימנתי "${t.title}" כבוצע ✅`:'המשימה כבר לא קיימת ביומן.'})}
  else if(a.t==='todo'){const o=ltd(),arr=o[a.day]||[];const i=arr[a.idx]&&arr[a.idx].text===a.text?a.idx:arr.findIndex(x=>x.text===a.text);if(i>=0){arr[i].done=true;std(o);refreshPlanner()}push({role:'user',text:'✅ '+a.text});const left=(ltd()[a.day]||[]).filter(x=>!x.done);
   const rest=m.btns.filter(x=>x.a.t==='todo'&&x!==b&&left.some(y=>y.text===x.a.text));push({role:'bot',text:`יופי! "${a.text}" סומן כבוצע ✅`+(rest.length?'\nומה עם השאר?':''),btns:rest.length?rest.concat({l:'עוד לא',a:{t:'later',k:a.k}}):undefined})}
  else{const o=rem();if(o[a.k]&&o[a.k].count<3)o[a.k].snooze=Date.now()+60*60000;else if(o[a.k])o[a.k].resolved=true;saveRem(o);push({role:'user',text:'עוד לא'});push({role:'bot',text:o[a.k]&&!o[a.k].resolved?'בסדר 👍 אשאל שוב בעוד שעה.':'בסדר 👍'})}
  saveChat();draw()}
-function checkReminders(){if(localStorage.getItem(LS.remOn)==='off')return;const now=Date.now(),o=rem(),day=plannerDay(),k=dkey(day),base=day.getTime();let n=0;
+function checkReminders(){if(localStorage.getItem(LS.remOn)==='off'||silenced())return;const now=Date.now(),o=rem(),day=plannerDay(),k=dkey(day),base=day.getTime();let n=0;
  for(const t of (lp()[k]||[])){const rk='task:'+k+':'+t.id,r=o[rk]||{count:0};if(t.done||r.resolved){continue}const end=base+(t.start+ +t.dur)*60000;if(now<end)continue;if(r.snooze&&now<r.snooze)continue;if(r.asked&&!r.snooze)continue;if(n>=3)break;
   r.asked=now;r.count=(r.count||0)+1;r.snooze=0;o[rk]=r;n++;const txt=`⏰ המשימה "${t.title}" (\u2066${fmtM(t.start)}–${fmtM(t.start+ +t.dur)}\u2069) הסתיימה. ביצעת אותה?`;
   chat.msgs.filter(m=>!m.answered&&m.btns&&m.btns.some(b=>b.a.k===rk)).forEach(m=>m.answered=true);
-  push({role:'bot',text:txt,btns:[{l:'✅ בוצע',a:{t:'task',k:rk,day:k,id:t.id}},{l:'עוד לא',a:{t:'later',k:rk}}]});ping(txt)}
+  push({role:'bot',text:txt,btns:[{l:'✅ בוצע',a:{t:'task',k:rk,day:k,id:t.id}},{l:'עוד לא',a:{t:'later',k:rk}}]});markPro();ping(txt)}
  const hm=new Date().getHours()*60+new Date().getMinutes();for(const [slot,at] of [['noon',13*60],['eve',20*60+30]]){const rk='todo:'+k+':'+slot;if(o[rk]||hm<at||hm>at+3*60)continue;const open=(ltd()[k]||[]).map((t,i)=>({...t,i})).filter(t=>!t.done);o[rk]={asked:now,count:3};if(!open.length)continue;
-  const txt=`📝 יש לך ${open.length} משימות פתוחות להיום. סיימת משהו מהן?`;push({role:'bot',text:txt+'\n'+open.map(t=>'• '+t.text).join('\n'),btns:open.slice(0,8).map(t=>({l:'✅ '+t.text,a:{t:'todo',k:rk,day:k,idx:t.i,text:t.text}})).concat({l:'עוד לא',a:{t:'later',k:rk}})});ping(txt)}
+  const txt=`📝 יש לך ${open.length} משימות פתוחות להיום. סיימת משהו מהן?`;push({role:'bot',text:txt+'\n'+open.map(t=>'• '+t.text).join('\n'),btns:open.slice(0,8).map(t=>({l:'✅ '+t.text,a:{t:'todo',k:rk,day:k,idx:t.i,text:t.text}})).concat({l:'עוד לא',a:{t:'later',k:rk}})});markPro();ping(txt)}
  saveRem(o)}
 
 // ---------- בוקר טוב יומי (מקומי, בלי שרת) ----------
@@ -358,11 +368,11 @@ function briefText(){const day=new Date();day.setHours(0,0,0,0);const k=dkey(day
  if(hasBud){const bs=budgetSummary();L.push(bs.balance>=0?`💰 נשאר לך החודש: ${nis(bs.balance)}`:`💰 שים לב: החודש הוצאת ${nis(-bs.balance)} יותר ממה שנכנס`);
   try{const hi=budgetInsights().highlights;if(hi.length)L.push('💡 '+hi[0])}catch(e){}}
  L.push('שיהיה יום מוצלח! 💪');return L.join('\n')}
-function morningBrief(force){if(!force&&localStorage.getItem(LS.brief)==='off')return false;const n=new Date();if(!force&&n.getHours()<6)return false;const today=isoNow();if(!force&&localStorage.getItem(LS.briefDay)===today)return false;
- localStorage.setItem(LS.briefDay,today);const txt=briefText();if(!txt)return false;push({role:'bot',text:txt});ping(txt);return true}
+function morningBrief(force){const n=new Date();if(!force&&n.getHours()<6)return false;const today=isoNow();if(!force&&localStorage.getItem(LS.briefDay)===today)return false;
+ localStorage.setItem(LS.briefDay,today);if(!force&&silenced())return false;const txt=briefText();if(!txt)return false;push({role:'bot',text:txt});markPro();ping(txt);return true}
 
 // ---------- הפעלה ----------
 function tick(){if(weeklyReset()){chat={msgs:[],api:[]};unread=0;localStorage.setItem('assistantUnread',0);badge();draw()}checkReminders();morningBrief()}
 tick();badge();setInterval(tick,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
-window.Assistant={send,runTool,checkReminders,tick,systemPrompt,morningBrief,budgetInsights,shrinkImage,open:openPane,close:closePane,get chat(){return chat},TOOLS};
+window.Assistant={silenced,markUser,send,runTool,checkReminders,tick,systemPrompt,morningBrief,budgetInsights,shrinkImage,open:openPane,close:closePane,get chat(){return chat},TOOLS};
 })();
