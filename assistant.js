@@ -121,10 +121,11 @@ function runTool(name,args){try{const f=EXEC[name];return f?f(args||{}):fail('כ
 // ---------- הנחיית מערכת ----------
 function systemPrompt(){const now=new Date(),C=B()?.categories||{},S=B()?.SUGG||{};
  const pend=Object.entries(J(LS.rem,{})).filter(([k,v])=>!v.resolved&&v.asked).map(([k])=>k);
- return `אתה "העוזר" ביומן האישי של נתנאל – אפליקציית לו"ז, משימות ותקציב בעברית. ענה תמיד בעברית, בקצרה ובחום, בלי מונחים טכניים. אם שואלים מי אתה, איזה מודל או איזו חברה עומדת מאחוריך – ענה רק שאתה "העוזר שלי" של היומן, ואל תזכיר שום חברה, מודל או טכנולוגיה.
+ return `אתה "העוזר" ביומן האישי של נתנאל – אפליקציית לו"ז, משימות ותקציב בעברית. ענה תמיד בעברית, בקצרה ובחום, בלי מונחים טכניים. אם שואלים מי אתה, איזה מודל או איזו חברה עומדת מאחוריך – ענה רק שאתה "העוזר שלי" של היומן, ואל תזכיר שום חברה, מודל או טכנולוגיה. אם שואלים על מגבלת הודעות, כמה הודעות נשארו, קוד אישי או מי מוגבל – אל תזכיר מגבלות, מספרים או קוד, ואל תנחה לגביהם.
 עכשיו: ${now.toLocaleString('he-IL',{weekday:'long',year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}. היום ביומן: ${isoOf(plannerDay())} (יום ${DN[plannerDay().getDay()]}).
 ימי השבוע הנוכחי: ${weekDays().map(d=>DN[d.getDay()]+'='+isoOf(d)).join(', ')}.
 כללים:
+- השיחה הזאת נמחקת אוטומטית כל מוצאי שבת ב-00:00 יחד עם הלו"ז והמשימות – לא צריך למחוק ידנית. "🧹 נקה את השיחה" הוא רק אפשרות נוספת.
 - אתה מבצע פעולות רק דרך הכלים. אחרי פעולה – אשר בקצרה מה נרשם (למשל: "רשמתי ⛽ דלק 200 ₪ ברכב ודלק").
 - אם חסר פרט הכרחי (סכום, קטגוריה, תיאור להוצאה, יום או שעה למשימה בלו"ז, סוג הכנסה) – שאל שאלה קצרה ואל תנחש. אם המשתמש אמר "מחר"/"ביום שלישי" – תרגם לתאריך מהרשימה. משך משימה שלא נאמר = 60 דקות.
 - קטגוריה להוצאה אפשר להסיק כשזה ברור מאוד מהתיאור (דלק→car, סופר→food, חשמל→bills). אם לא ברור – שאל.
@@ -144,7 +145,7 @@ ${Object.keys(C).map(k=>`${k}=${C[k][0]}: ${(S[k]||[]).join(' | ')}`).join('\n')
 • לו"ז: משבצות 15 דק׳ מ-08:00 עד 02:00 (בשבת עד 23:45); עד 02:30 בלילה עדיין נחשב היום הקודם. הוספה: לוחצים על משבצת ריקה ← "משימה חדשה": כותרת, שעת התחלה, משך (15 דק׳ עד 8 שע׳), קטגוריה (עבודה/אישי/קניות/אחר, לכל אחת צבע – מקרא למעלה), הערה ← "שמור". עריכה: לוחצים על המשימה ← משנים ← "שמור"; מחיקה: "מחק". ☐ בפינת המשימה = סימון בוצע (✅ וקו חוצה). 10 דקות לפני משימה יש צפצוף, רטט והתראה ⏰.
 • משימות (בלי שעה): כותבים ב"מה צריך לעשות היום?", בוחרים קטגוריה (או "ללא") ← "הוסף" או Enter. ☐ או לחיצה על הטקסט = בוצע; ✏️ עריכה; 🗑️ מחיקה. "העבר משימות שלא הושלמו למחר ←" מעביר את הפתוחות ליום הבא (לא בשבת). כל יום עם רשימה משלו.
 • סיכום: ליום הנבחר – כמה בוצעו בלו"ז ובמשימות, זמן שבוצע/מתוכנן, התקדמות לפי קטגוריה, "✅ מה הושלם" ו"⏳ לא הושלם".
-• איפוס שבועי: כל מוצאי שבת ב-00:00 נמחקים הלו"ז, המשימות, השיחה עם העוזר והתזכורות. נשמרים: כל התקציב וההשקעות, מצב כהה, הקוד האישי וההגדרות. אי אפשר לתכנן שבוע הבא מראש.
+• איפוס שבועי: כל מוצאי שבת ב-00:00 נמחקים אוטומטית הלו"ז, המשימות, השיחה עם העוזר והתזכורות – לא צריך למחוק את השיחה ידנית. נשמרים: כל התקציב וההשקעות, מצב כהה וההגדרות. אי אפשר לתכנן שבוע הבא מראש.
 • תקציב: למעלה "→ חודש קודם" / "חודש הבא ←". מדורים: סקירה | הכנסות | הוצאות | קבועות | השקעות. הכפתור הגדול "＋" משתנה לפי המדור ("תנועה חדשה" / "הכנסה חדשה" / "הוצאה / הכנסה קבועה" / "השקעה או חיסכון").
  – הוצאה: מדור הוצאות ← "＋ תנועה חדשה" ← בוחרים "קטגוריית הוצאה" ← לוחצים על "תיאור" ונפתח "בחר תיאור" עם הצעות + אימוג׳י לפי הקטגוריה (או כותבים חופשי ← "אישור") ← "סכום ₪" ← "שמור". תנועה נרשמת להיום.
  – הכנסה: מדור הכנסות ← "＋ הכנסה חדשה" ← סוג הכנסה (משכורת/עצמאי/קצבה/אחר) + סכום. הפקדה לחיסכון: סוג תנועה "הפקדה לחיסכון", או במדור השקעות "＋ הפקדה לחיסכון".
@@ -152,7 +153,7 @@ ${Object.keys(C).map(k=>`${k}=${C[k][0]}: ${(S[k]||[]).join(' | ')}`).join('\n')
  – סקירה: הכנסות, הוצאות כולל קבועות, הפקדות לחיסכון, "נשאר לך". לכל קטגוריה שדה "יעד ₪" לחודש (נשמר לכל חודש בנפרד): ב-80% "⚠️ קרוב לתקציב", ב-100% "⚠️ הגעת לתקציב" (+התראה).
  – השקעות: אחזקות (קרן השתלמות/מניות/פיקדון/קריפטו/חיסכון/אחר) עם הושקע, שווי נוכחי ורווח/הפסד; "עריכה"/"מחיקה". לא מתאפסות לפי חודש וניתנות לעריכה תמיד.
  – חודשים קודמים: 🔒 צפייה בלבד + טבלת "תוצאות החודש". הנתונים נשמרים רק בטלפון, בלי חיבור לבנק.
-• העוזר (אתה): כפתור 🤖 בפינה (מספר עליו = הודעות שלא נקראו) פותח את "🤖 העוזר שלי"; ✕ סוגר. כותבים ושולחים ב-➤, או 🎤 לדיבור בעברית (⏹ לעצירה). ⚙️ הגדרות: "קוד אישי (לא חובה)" – מבטל את מגבלת 50 ההודעות ביום (בלי קוד עובד רגיל), "🗑️ הסר קוד", תיבת "תזכורות: לשאול אותי אם ביצעתי משימות", "שמור", "🧹 נקה את השיחה". תזכורות: כשמשימת לו"ז מסתיימת אני שואל עם "✅ בוצע" / "עוד לא" (עוד לא = שואל שוב בעוד שעה, עד 3 פעמים); ב-13:00 וב-20:30 שואל על משימות פתוחות.
+• העוזר (אתה): כפתור 🤖 בפינה (מספר עליו = הודעות שלא נקראו) פותח את "🤖 העוזר שלי"; ✕ סוגר. כותבים ושולחים ב-➤, או 🎤 לדיבור בעברית (⏹ לעצירה). ⚙️ הגדרות: תיבת "תזכורות: לשאול אותי אם ביצעתי משימות", "שמור", "🧹 נקה את השיחה" (רק אם רוצים למחוק עכשיו; השיחה גם נמחקת אוטומטית כל מוצאי שבת ב-00:00, בלי צורך למחוק ידנית). תזכורות: כשמשימת לו"ז מסתיימת אני שואל עם "✅ בוצע" / "עוד לא" (עוד לא = שואל שוב בעוד שעה, עד 3 פעמים); ב-13:00 וב-20:30 שואל על משימות פתוחות.
 • התקנה כאפליקציה: אייפון – Safari ← שיתוף ← "הוסף למסך הבית"; אנדרואיד – Chrome ← ⋮ ← "התקן אפליקציה"/"הוסף למסך הבית". עובד גם בלי אינטרנט (חוץ מהעוזר).
 • דברים שרק המשתמש עושה (הדרך אותו): מצב כהה, הפעלת התראות, העברת משימות למחר, עריכת טקסט של משימה בלי שעה, עריכת הכנסה/הוצאה/קבועה קיימת (לוחצים "עריכה" ליד הפריט), מעבר בין חודשים, הגדרות העוזר.
 ${pend.length?'תזכורות פתוחות ששאלת עליהן (אם המשתמש עונה "עשיתי"/"בוצע" – סמן בכלי המתאים): '+pend.join(', '):''}
@@ -163,13 +164,13 @@ ${JSON.stringify({planner:plannerSnapshot(),budget:budgetSummary()})}`}
 const getOwner=()=>localStorage.getItem(LS.owner)||'';
 function deviceId(){let d=localStorage.getItem(LS.device);if(!d||!/^[A-Za-z0-9_-]{8,80}$/.test(d)){d=uid().replace(/[^A-Za-z0-9-]/g,'');localStorage.setItem(LS.device,d)}return d}
 const hdrs=turn=>{const h={'X-Device-Id':deviceId()};if(turn)h['X-Turn-Id']=turn;const o=getOwner();if(o)h['X-Owner-Code']=o;return h};
-function saveQuota(r){const rem=r.headers.get('X-Remaining');if(rem==null)return;W(LS.quota,{rem,limit:+r.headers.get('X-Limit')||50,owner:r.headers.get('X-Owner')==='1',day:isoNow()});quotaUI()}
+function saveQuota(r){const rem=r.headers.get('X-Remaining');if(rem==null)return;W(LS.quota,{rem,limit:+r.headers.get('X-Limit')||50,owner:r.headers.get('X-Owner')==='1',day:isoNow()})}
 const newTurn=()=>uid().replace(/[^A-Za-z0-9-]/g,'');
 async function gemini(contents,extra={},turn=newTurn()){let r;
  try{r=await fetch(PROXY,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json',...hdrs(turn)},body:JSON.stringify({contents,...extra})})}
  catch(e){throw new Error('אין חיבור לעוזר כרגע. בדוק את האינטרנט ונסה שוב.')}
  saveQuota(r);let j=null;try{j=await r.json()}catch(e){}
- if(!r.ok){const code=j?.error;const err=new Error(code==='limit'?`הגעת ל-${j.limit||50} הודעות להיום, נתראה מחר 🙂`:code==='busy'?'העוזר עמוס כרגע, נסה שוב עוד מעט':code==='turn'?'turn':'משהו השתבש בשרת ('+r.status+'). נסה שוב עוד מעט.');err.code=code;throw err}
+ if(!r.ok){const code=j?.error;const err=new Error(code==='limit'?'העוזר עמוס כרגע, נסה שוב מחר 🙏':code==='busy'?'העוזר עמוס כרגע, נסה שוב עוד מעט':code==='turn'?'turn':'משהו השתבש בשרת ('+r.status+'). נסה שוב עוד מעט.');err.code=code;throw err}
  return j}
 function trimApi(api){const MAX=40;if(api.length<=MAX)return api;let i=api.length-MAX;while(i<api.length&&!(api[i].role==='user'&&api[i].parts.some(p=>p.text!=null)))i++;return api.slice(i)}
 
@@ -183,14 +184,17 @@ const fab=document.createElement('button');fab.id='as-fab';fab.type='button';fab
 const pane=document.createElement('section');pane.id='as-pane';pane.hidden=true;pane.setAttribute('role','dialog');pane.setAttribute('aria-label','העוזר');
 pane.innerHTML=`<div class="as-head"><button type="button" class="as-x" aria-label="סגור">✕</button><h2>🤖 העוזר שלי</h2><button type="button" class="as-gear" aria-label="הגדרות">⚙️</button></div>
 <div class="as-body"><div class="as-msgs" aria-live="polite"></div>
-<div class="as-set" hidden><h3>⚙️ הגדרות העוזר</h3>
-<p class="as-quota as-small"></p>
-<p class="as-kstat"></p><label><span class="as-klabel">קוד אישי (לא חובה)</span><input type="password" class="as-key" autocomplete="off" placeholder="הדבק כאן את הקוד האישי" dir="ltr"></label>
-<p class="as-small">הקוד האישי מבטל את מגבלת ההודעות היומית. מי שאין לו קוד – העוזר עובד לו רגיל, עד 50 הודעות ביום.</p>
+<div class="as-set" hidden><h3 class="as-set-title">⚙️ הגדרות העוזר</h3>
+<div class="as-owner" hidden>
+<p class="as-kstat" hidden></p>
+<label><span class="as-klabel">קוד אישי</span><input type="password" class="as-key" autocomplete="off" placeholder="הדבק כאן את הקוד האישי" dir="ltr"></label>
+<p class="as-small">הקוד נשמר רק בטלפון הזה ולא נמחק באיפוס השבועי.</p>
+<button type="button" class="as-delkey" hidden>🗑️ הסר קוד</button>
+</div>
 <label class="as-chk"><input type="checkbox" class="as-rem"> תזכורות: לשאול אותי אם ביצעתי משימות</label>
-<div class="as-row"><button type="button" class="as-save">שמור</button><button type="button" class="as-delkey">🗑️ הסר קוד</button></div>
+<div class="as-row"><button type="button" class="as-save">שמור</button></div>
 <button type="button" class="as-clear">🧹 נקה את השיחה</button>
-<p class="as-small">🔒 הקוד האישי נשמר רק בטלפון הזה ולא נמחק באיפוס השבועי. ההודעות עוברות דרך השרת של היומן. השיחה מתאפסת כל מוצאי שבת ב-00:00 ביחד עם היומן. נתוני התקציב לא נמחקים.</p></div></div>
+<p class="as-small">🔒 השיחה מתאפסת כל מוצאי שבת ב-00:00 ביחד עם היומן. נתוני התקציב לא נמחקים.</p></div></div>
 <div class="as-typing" hidden>העוזר חושב…</div>
 <form class="as-in"><button type="button" class="as-mic" aria-label="הקלטה">🎤</button><textarea rows="1" placeholder="כתוב או הקלט מה לעשות…" aria-label="הודעה"></textarea><button type="submit" class="as-send" aria-label="שלח">➤</button></form>`;
 document.body.append(pane);
@@ -204,14 +208,22 @@ function draw(){if(pane.hidden)return;const welcome=!chat.msgs.length?`<div clas
 function openPane(){pane.hidden=false;fab.hidden=true;unread=0;localStorage.setItem('assistantUnread',0);badge();setEl.hidden=true;msgsEl.hidden=false;draw();setTimeout(()=>ta.focus(),50)}
 function closePane(){pane.hidden=true;fab.hidden=false;stopMic()}
 fab.onclick=openPane;pane.querySelector('.as-x').onclick=closePane;
-pane.querySelector('.as-gear').onclick=()=>{const show=setEl.hidden;setEl.hidden=!show;msgsEl.hidden=show;loadSet();if(show)refreshQuota();else draw()};
-function quotaUI(){const el=pane.querySelector('.as-quota');if(!el)return;const q=J(LS.quota,null);
- el.textContent=!q||q.day!==isoNow()?'':q.owner?'✨ ללא הגבלת הודעות (קוד אישי פעיל)':`נשארו לך היום ${q.rem} מתוך ${q.limit} הודעות`}
-async function refreshQuota(){try{const r=await fetch(QUOTA_URL,{cache:'no-store',headers:hdrs()});saveQuota(r);const j=await r.json();
- if(getOwner()){const st=pane.querySelector('.as-kstat');st.innerHTML=j.owner?'✅ קוד אישי פעיל – ללא הגבלה':'⚠️ הקוד האישי לא נכון – העוזר עובד עם המגבלה הרגילה';st.className='as-kstat '+(j.owner?'yes':'no')}}catch(e){}}
-function loadSet(){const k=getOwner();pane.querySelector('.as-key').value='';pane.querySelector('.as-kstat').innerHTML=k?'✅ קוד אישי שמור: <span dir="ltr">••••'+esc(k.slice(-2))+'</span>':'אין קוד אישי (לא חובה)';pane.querySelector('.as-kstat').className='as-kstat '+(k?'yes':'');pane.querySelector('.as-klabel').textContent=k?'להחלפת הקוד – הדבק קוד חדש (אפשר להשאיר ריק)':'קוד אישי (לא חובה)';pane.querySelector('.as-delkey').hidden=!k;pane.querySelector('.as-rem').checked=localStorage.getItem(LS.remOn)!=='off';quotaUI()}
-pane.querySelector('.as-save').onclick=()=>{const k=pane.querySelector('.as-key').value.trim();if(k){localStorage.setItem(LS.owner,k);localStorage.removeItem(LS.quota)}localStorage.setItem(LS.remOn,pane.querySelector('.as-rem').checked?'on':'off');setEl.hidden=true;msgsEl.hidden=false;draw()};
-pane.querySelector('.as-delkey').onclick=()=>{if(confirm('להסיר את הקוד האישי מהטלפון? העוזר ימשיך לעבוד עם מגבלה של 50 הודעות ביום.')){localStorage.removeItem(LS.owner);localStorage.removeItem(LS.quota);loadSet();refreshQuota()}};
+pane.querySelector('.as-gear').onclick=()=>{const show=setEl.hidden;setEl.hidden=!show;msgsEl.hidden=show;loadSet();if(show&&isOwnerUI()&&getOwner())refreshQuota();else if(!show)draw()};
+let ownerReveal=false;
+function isOwnerUI(){try{if(new URLSearchParams(location.search).has('owner'))ownerReveal=true}catch(e){}if(getOwner())ownerReveal=true;return ownerReveal}
+function syncOwnerUI(){const box=pane.querySelector('.as-owner');if(box)box.hidden=!isOwnerUI()}
+async function refreshQuota(){if(!isOwnerUI()||!getOwner())return;try{const r=await fetch(QUOTA_URL,{cache:'no-store',headers:hdrs()});saveQuota(r);const j=await r.json();
+ const st=pane.querySelector('.as-kstat');if(!st)return;st.hidden=false;st.innerHTML=j.owner?'✅ קוד אישי פעיל – ללא הגבלה':'⚠️ הקוד האישי לא נכון';st.className='as-kstat '+(j.owner?'yes':'no')}catch(e){}}
+function loadSet(){const k=getOwner();syncOwnerUI();const keyEl=pane.querySelector('.as-key'),st=pane.querySelector('.as-kstat'),del=pane.querySelector('.as-delkey'),lab=pane.querySelector('.as-klabel');
+ if(keyEl)keyEl.value='';
+ if(st){st.hidden=!k;st.innerHTML=k?'✅ קוד אישי שמור':'';st.className='as-kstat'+(k?' yes':'')}
+ if(lab)lab.textContent=k?'להחלפת הקוד – הדבק קוד חדש (אפשר להשאיר ריק)':'קוד אישי';
+ if(del)del.hidden=!k;
+ pane.querySelector('.as-rem').checked=localStorage.getItem(LS.remOn)!=='off'}
+pane.querySelector('.as-save').onclick=()=>{const box=pane.querySelector('.as-owner');const k=(!box.hidden&&pane.querySelector('.as-key'))?pane.querySelector('.as-key').value.trim():'';if(k){localStorage.setItem(LS.owner,k);localStorage.removeItem(LS.quota)}localStorage.setItem(LS.remOn,pane.querySelector('.as-rem').checked?'on':'off');setEl.hidden=true;msgsEl.hidden=false;draw()};
+pane.querySelector('.as-delkey').onclick=()=>{if(confirm('להסיר את הקוד האישי מהטלפון?')){localStorage.removeItem(LS.owner);localStorage.removeItem(LS.quota);loadSet()}};
+{const h=pane.querySelector('.as-set-title');let n=0,t=0;h.addEventListener('click',()=>{const now=Date.now();if(now-t>2000)n=0;t=now;if(++n>=5){n=0;ownerReveal=true;syncOwnerUI();loadSet()}})}
+
 pane.querySelector('.as-clear').onclick=()=>{if(confirm('לנקות את כל השיחה?')){chat={msgs:[],api:[]};saveChat();setEl.hidden=true;msgsEl.hidden=false;draw()}};
 ta.addEventListener('input',()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,120)+'px'});
 ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();pane.querySelector('form').requestSubmit()}});
